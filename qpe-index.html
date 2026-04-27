@@ -1802,17 +1802,6 @@ footer a:hover { color: var(--spark); border-color: var(--spark); }
     <p class="narrow">Phase estimation is the last building block before Shor's factoring algorithm. To factor a composite number <span class="mono">N</span>, Shor's procedure picks a random <span class="mono">a</span> coprime to <span class="mono">N</span>, then uses QPE to find the <em>order</em> of <span class="mono">a</span> modulo <span class="mono">N</span> — the smallest <span class="mono">r</span> with <span class="mono">aʳ ≡ 1 (mod N)</span>. The unitary in question is "multiply by <span class="mono">a</span> mod <span class="mono">N</span>"; its eigenphases turn out to be multiples of <span class="mono">1/r</span>; QPE reads them and a continued-fraction expansion recovers <span class="mono">r</span>. From there, simple classical arithmetic yields a factor of <span class="mono">N</span>.</p>
 
     <p class="narrow">Phase estimation is also the workhorse of quantum chemistry algorithms (eigenvalues of molecular Hamiltonians) and HHL-style linear-systems solvers. Anywhere you need to read out a unitary's spectrum, QPE is the tool.</p>
-
-    <h3 style="margin-top:3.5rem; font-style:italic">The series so far.</h3>
-    <ul class="series-list">
-      <li><span class="num">01</span><span class="name">Deutsch–Jozsa <span class="done">✓</span></span><span class="status">Published</span></li>
-      <li><span class="num">02</span><span class="name">Bernstein–Vazirani <span class="done">✓</span></span><span class="status">Published</span></li>
-      <li><span class="num">03</span><span class="name">Simon's algorithm <span class="done">✓</span></span><span class="status">Published</span></li>
-      <li><span class="num">04</span><span class="name">Grover's search <span class="done">✓</span></span><span class="status">Published</span></li>
-      <li><span class="num">05</span><span class="name">Quantum Fourier Transform <span class="done">✓</span></span><span class="status">Published</span></li>
-      <li><span class="num">06</span><span class="name">Quantum Phase Estimation <span class="here">you are here</span></span><span class="status">Published</span></li>
-      <li><span class="num">07</span><span class="name">Shor's factoring</span><span class="status">Next</span></li>
-    </ul>
   </div>
 </section>
 
