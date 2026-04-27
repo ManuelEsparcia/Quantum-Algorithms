@@ -1,0 +1,2584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Grover's Search — A Hands-On Introduction</title>
+<meta name="description" content="A quadratic speedup for unstructured search — rotations on a plane." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:ital,opsz,wght@0,6..72,200..800;1,6..72,200..800&display=swap" rel="stylesheet">
+<style>
+/* =========================================================
+   1. DESIGN TOKENS
+   ========================================================= */
+:root {
+  --bg:         #17130f;
+  --bg-soft:    #1f1a15;
+  --bg-lift:    #2a231c;
+  --ink:        #f1e6ce;
+  --ink-soft:   #c5b9a0;
+  --ink-dim:    #8a806d;
+  --line:       #3a3128;
+  --line-soft:  #2a231c;
+
+  --quantum:       #7bd3c8;
+  --quantum-dim:   #3d7a75;
+  --classical:     #e89a5a;
+  --classical-dim: #7a4f2a;
+  --spark:         #f5d547;
+  --alert:         #e0624b;
+
+  --font-display: "Instrument Serif", "Fraunces", Georgia, serif;
+  --font-body:    "Newsreader", "EB Garamond", Georgia, serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+
+  --measure:      68ch;
+  --radius-s:     4px;
+  --radius-m:     10px;
+  --radius-l:     20px;
+  --shadow-soft:  0 14px 40px -12px rgba(0,0,0,0.6);
+  --ease:         cubic-bezier(0.33, 1, 0.68, 1);
+  --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* =========================================================
+   2. RESET + BASE
+   ========================================================= */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 18px;
+  line-height: 1.65;
+  font-feature-settings: "liga", "kern";
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Warm subtle grain everywhere */
+body::before {
+  content: "";
+  position: fixed; inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  z-index: 1000;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+::selection { background: var(--spark); color: #000; }
+
+/* =========================================================
+   3. TYPOGRAPHY
+   ========================================================= */
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+}
+.display {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: clamp(3.2rem, 9vw, 7rem);
+  line-height: 0.98;
+  letter-spacing: -0.03em;
+}
+h2 {
+  font-size: clamp(2rem, 4.6vw, 3.4rem);
+  font-style: italic;
+  margin-bottom: 0.35em;
+}
+h2::before {
+  content: attr(data-act);
+  display: block;
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-size: 0.68rem;
+  letter-spacing: 0.3em;
+  color: var(--ink-dim);
+  margin-bottom: 1.4rem;
+  text-transform: uppercase;
+}
+h3 {
+  font-size: 1.6rem;
+  margin-bottom: 0.6em;
+}
+p {
+  margin-bottom: 1.1em;
+  max-width: var(--measure);
+}
+.lead {
+  font-size: clamp(1.15rem, 1.7vw, 1.35rem);
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+}
+em { font-style: italic; color: var(--spark); }
+strong { font-weight: 600; color: var(--ink); }
+code, .mono {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: var(--bg-soft);
+  padding: 0.08em 0.35em;
+  border-radius: var(--radius-s);
+  color: var(--quantum);
+  border: 1px solid var(--line-soft);
+}
+
+/* =========================================================
+   4. LAYOUT
+   ========================================================= */
+section {
+  padding: 9rem 1.5rem;
+  position: relative;
+}
+.container {
+  max-width: 1080px;
+  margin: 0 auto;
+}
+.narrow { max-width: 640px; margin: 0 auto; }
+
+.section-rule {
+  width: 80px; height: 1px;
+  background: var(--line);
+  margin: 0 0 2.5rem 0;
+}
+
+/* Progress rail on the side */
+.rail {
+  position: fixed; top: 50%; left: 1.2rem;
+  transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 0.8rem;
+  z-index: 100;
+  mix-blend-mode: difference;
+}
+.rail a {
+  display: block; width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(241,230,206,0.28);
+  transition: all 0.3s var(--ease);
+  position: relative;
+}
+.rail a.active { background: var(--spark); transform: scale(1.35); }
+.rail a:hover::after {
+  content: attr(data-label);
+  position: absolute; left: 20px; top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-mono); font-size: 0.7rem;
+  color: var(--ink); white-space: nowrap;
+  background: var(--bg-soft); padding: 4px 10px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--line);
+}
+@media (max-width: 820px) { .rail { display: none; } }
+
+/* =========================================================
+   5. HERO
+   ========================================================= */
+#hero {
+  min-height: 100vh;
+  display: flex; flex-direction: column; justify-content: center;
+  padding-top: 6rem; padding-bottom: 6rem;
+  position: relative;
+  overflow: hidden;
+}
+.hero-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.35em;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  margin-bottom: 2rem;
+}
+.hero-eyebrow .dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--quantum);
+  margin-right: 0.8rem;
+  vertical-align: middle;
+  animation: pulse 2.4s var(--ease) infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50%      { opacity: 1;   transform: scale(1.4); }
+}
+#hero .display span { color: var(--ink); }
+#hero .display .dash { color: var(--spark); font-style: normal; margin: 0 -0.15em; }
+.hero-sub {
+  margin-top: 1.8rem;
+  font-size: clamp(1.1rem, 1.6vw, 1.35rem);
+  max-width: 46ch;
+  color: var(--ink-soft);
+}
+.hero-meta {
+  margin-top: 3rem;
+  display: flex; gap: 2.2rem; flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.hero-meta b {
+  display: block;
+  color: var(--ink);
+  font-weight: 500;
+  font-size: 0.85rem;
+  margin-top: 0.2rem;
+}
+/* Animated bars behind hero title */
+.hero-bg {
+  position: absolute; inset: 0;
+  z-index: 0; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0.18;
+}
+.hero-bg svg { width: 90%; max-width: 900px; height: 260px; }
+#hero > * { position: relative; z-index: 1; }
+
+.scroll-cue {
+  margin-top: 5rem;
+  display: inline-flex; align-items: center; gap: 0.9rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.scroll-cue::before {
+  content: ""; width: 36px; height: 1px;
+  background: var(--ink-dim);
+  animation: cue 2s var(--ease) infinite;
+}
+@keyframes cue {
+  0%, 100% { transform: scaleX(1); opacity: 0.5; }
+  50%      { transform: scaleX(1.4); opacity: 1; }
+}
+
+/* =========================================================
+   6. PROMISE SECTION
+   ========================================================= */
+.promise-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-top: 3rem;
+}
+@media (max-width: 720px) { .promise-grid { grid-template-columns: 1fr; } }
+.promise-card {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 1.6rem 1.6rem 1.8rem;
+  position: relative;
+  overflow: hidden;
+}
+.promise-card .label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 1rem;
+}
+.promise-card h3 {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.8rem;
+  margin-bottom: 1.2rem;
+}
+.promise-card.constant h3  { color: var(--classical); }
+.promise-card.balanced h3  { color: var(--quantum); }
+
+.truth-table {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+.truth-table > div {
+  padding: 0.4em 0.9em;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex; align-items: center;
+}
+.truth-table > div:nth-last-child(-n+2) { border-bottom: none; }
+.truth-table .hx { background: var(--bg-lift); color: var(--ink-dim); }
+.truth-table .hy { background: var(--bg-lift); color: var(--ink-dim); font-weight: 500; }
+.truth-table .val { font-weight: 700; }
+.truth-table .val.zero { color: var(--ink-soft); }
+.truth-table .val.one  { color: var(--spark); }
+.truth-table .hx.marked-row { color: var(--spark); font-weight: 700; }
+.truth-table .hx.pair { font-size: 0.86rem; }
+.truth-table .hx.pair .pair-sep { color: var(--ink-dim); margin: 0 0.3em; }
+
+.promise-card button {
+  margin-top: 1.2rem;
+  width: 100%;
+}
+
+/* =========================================================
+   7. CLASSICAL GAME
+   ========================================================= */
+.game-board {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 2rem;
+  margin-top: 2rem;
+}
+.game-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+.game-title {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.3rem;
+  color: var(--classical);
+}
+.query-counter {
+  display: flex; gap: 1.2rem; align-items: baseline;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.query-counter .n {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 2.4rem;
+  color: var(--spark);
+  line-height: 1;
+  font-feature-settings: "tnum";
+  letter-spacing: -0.02em;
+}
+.query-counter .slash {
+  color: var(--ink-dim);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.6rem;
+  margin: 0 -0.2em;
+}
+.query-counter .max {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.4rem;
+  color: var(--ink-soft);
+}
+
+.query-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.7rem;
+  margin-bottom: 1.8rem;
+}
+@media (max-width: 520px) { .query-grid { grid-template-columns: repeat(2, 1fr); } }
+.q-cell {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 1rem 0.6rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.25s var(--ease);
+  position: relative;
+  user-select: none;
+}
+.q-cell:hover:not(.queried):not(.locked) {
+  border-color: var(--classical);
+  background: var(--bg-lift);
+  transform: translateY(-1px);
+}
+.q-cell .x {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  display: block;
+  margin-bottom: 0.3rem;
+}
+.q-cell .result {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.8rem;
+  color: var(--ink-dim);
+  line-height: 1;
+  display: block;
+  min-height: 1.8rem;
+}
+.q-cell.queried .result.zero { color: var(--ink); }
+.q-cell.queried .result.one  { color: var(--spark); }
+.q-cell.queried  { background: var(--bg-lift); border-color: var(--classical-dim); }
+.q-cell.locked   { cursor: not-allowed; opacity: 0.6; }
+.q-cell .flash {
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  background: var(--spark);
+  opacity: 0;
+  pointer-events: none;
+}
+.q-cell.flash-on .flash { animation: flash 0.45s var(--ease-out); }
+@keyframes flash {
+  0%   { opacity: 0.5; }
+  100% { opacity: 0; }
+}
+
+.belief-bar {
+  height: 8px; width: 100%;
+  background: var(--bg-lift);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+  position: relative;
+}
+.belief-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--classical-dim), var(--classical), var(--spark));
+  transition: width 0.6s var(--ease-out);
+  width: 0%;
+}
+.belief-label {
+  display: flex; justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 0.5rem;
+}
+.belief-label b {
+  color: var(--ink-soft);
+  font-feature-settings: "tnum";
+}
+
+.commit-row {
+  display: flex; gap: 0.8rem; flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+.commit-row button { flex: 1; min-width: 160px; }
+
+.verdict {
+  margin-top: 1.5rem;
+  padding: 1.2rem 1.4rem;
+  border-radius: var(--radius-m);
+  border-left: 3px solid;
+  background: var(--bg);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: 1.5;
+  display: none;
+}
+.verdict.show { display: block; animation: fadeIn 0.4s var(--ease-out); }
+.verdict.win   { border-color: var(--quantum); }
+.verdict.lucky { border-color: var(--spark); }
+.verdict.wrong { border-color: var(--alert); }
+.verdict.info  { border-color: var(--classical); }
+.verdict b { color: var(--spark); }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* BV-specific: secret-so-far display */
+.secret-reveal {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 0.8rem;
+  padding: 1.8rem 1rem;
+  margin-bottom: 1.5rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
+.secret-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.secret-bits {
+  display: flex;
+  gap: 0.6rem;
+}
+.secret-bits .bit {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 54px; height: 66px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--bg-soft);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 2.6rem;
+  line-height: 1;
+  color: var(--ink-dim);
+  transition: all 0.5s var(--ease-out);
+}
+.secret-bits .bit.revealed.zero {
+  color: var(--ink);
+  border-color: var(--classical-dim);
+  background: var(--bg-lift);
+}
+.secret-bits .bit.revealed.one {
+  color: var(--spark);
+  border-color: var(--spark);
+  background: rgba(245,213,71,0.08);
+}
+.secret-bits .bit.just-revealed {
+  animation: reveal 0.8s var(--ease-out);
+}
+@keyframes reveal {
+  0%   { transform: scale(1.15); box-shadow: 0 0 0 0 rgba(245,213,71,0.4); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 20px rgba(245,213,71,0); }
+}
+.candidates-info {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  color: var(--ink-dim);
+  margin-top: 0.4rem;
+}
+.candidates-info #candidates-count {
+  color: var(--spark);
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+/* Query sections */
+.queries-section { margin-bottom: 1.2rem; }
+.queries-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 0.8rem;
+}
+.basis-queries {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.6rem;
+}
+@media (max-width: 520px) { .basis-queries { grid-template-columns: repeat(2, 1fr); } }
+.basis-queries .btn {
+  padding: 0.75em 0.5em;
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  font-family: var(--font-mono);
+}
+.basis-queries .btn.used {
+  opacity: 0.45;
+  pointer-events: none;
+  border-style: dashed;
+}
+.custom-query-row {
+  display: flex; gap: 0.6rem;
+}
+.custom-query-row .sb-text { flex: 1; }
+
+.query-log {
+  margin-top: 1.2rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  max-height: 180px;
+  overflow-y: auto;
+}
+.query-log ul {
+  list-style: none;
+  padding: 0.4rem 1.2rem 1rem;
+  margin: 0;
+}
+.query-log li {
+  padding: 0.4rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--line-soft);
+  display: flex; gap: 1rem; align-items: baseline;
+}
+.query-log li:last-child { border-bottom: none; }
+.query-log li .idx {
+  color: var(--ink-dim);
+  min-width: 2ch;
+}
+.query-log li .x { color: var(--ink); }
+.query-log li .arrow { color: var(--ink-dim); }
+.query-log li .f { color: var(--spark); font-weight: 700; }
+.query-log li .elim { color: var(--ink-dim); margin-left: auto; font-size: 0.72rem; }
+
+/* Grover-specific: haystack grid */
+.haystack-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 0.5rem;
+  margin: 0.5rem 0 1.5rem;
+}
+@media (max-width: 600px) {
+  .haystack-grid { grid-template-columns: repeat(4, 1fr); }
+}
+.hay-cell {
+  aspect-ratio: 1;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+  position: relative;
+  user-select: none;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-dim);
+}
+.hay-cell:hover:not(.checked):not(.locked) {
+  border-color: var(--classical);
+  background: var(--bg-lift);
+  color: var(--ink);
+  transform: translateY(-1px);
+}
+.hay-cell.checked {
+  background: var(--bg-lift);
+  border-color: var(--classical-dim);
+  cursor: default;
+  opacity: 0.55;
+}
+.hay-cell.checked .x-mark {
+  color: var(--classical-dim);
+  font-size: 1.2rem;
+  font-family: var(--font-display);
+  font-style: italic;
+}
+.hay-cell.found {
+  background: var(--spark);
+  border-color: var(--spark);
+  color: #1a1509;
+  animation: foundPulse 0.6s var(--ease-out);
+}
+.hay-cell.found .x-mark {
+  color: #1a1509;
+  font-weight: 700;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.4rem;
+}
+.hay-cell.locked { cursor: not-allowed; }
+@keyframes foundPulse {
+  0%   { transform: scale(1.1); box-shadow: 0 0 0 0 rgba(245,213,71,0.6); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 24px rgba(245,213,71,0); }
+}
+.hay-cell .label {
+  position: absolute;
+  top: 4px; left: 5px;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--ink-dim);
+  opacity: 0.55;
+}
+.hay-cell.found .label { color: #1a1509; opacity: 0.7; }
+.query-log li .meaning { color: var(--ink-soft); }
+.query-log li .meaning sub { font-size: 0.75em; }
+
+/* Rules / How it works aside */
+.rules-box {
+  max-width: var(--measure);
+  margin: 2.5rem 0 2rem;
+  padding: 1.6rem 1.8rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--quantum);
+  border-radius: var(--radius-m);
+}
+.rules-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--quantum);
+  margin-bottom: 0.9rem;
+}
+.rules-box p {
+  font-size: 1rem;
+  line-height: 1.55;
+  margin-bottom: 0.8rem;
+  max-width: none;
+}
+.example-list {
+  list-style: none;
+  padding: 0.6rem 0;
+  margin: 0 0 0.8rem;
+  font-size: 0.95rem;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+.example-list li {
+  padding: 0.35rem 0;
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+}
+.example-list li .mono { background: transparent; border: none; padding: 0; color: var(--ink); }
+.example-list li strong { color: var(--spark); font-weight: 700; }
+.ex-result {
+  font-family: var(--font-mono);
+  color: var(--spark);
+  font-weight: 700;
+  background: rgba(245,213,71,0.08);
+  padding: 0.08em 0.4em;
+  border-radius: 3px;
+}
+
+/* Basis-query button with two lines */
+.basis-queries .btn {
+  display: flex; flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.7em 0.5em;
+}
+.basis-queries .btn .reveals {
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  color: var(--quantum);
+  font-weight: 400;
+  text-transform: none;
+}
+.basis-queries .btn.used .reveals { color: var(--ink-dim); }
+
+/* =========================================================
+   8. BUTTONS
+   ========================================================= */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.6rem;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 500;
+  padding: 0.85em 1.4em;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+  text-decoration: none;
+  line-height: 1;
+}
+.btn:hover { border-color: var(--ink); background: var(--bg-lift); }
+.btn.primary {
+  background: var(--spark);
+  color: #1a1509;
+  border-color: var(--spark);
+  font-weight: 700;
+}
+.btn.primary:hover {
+  background: #fbe064;
+  border-color: #fbe064;
+  transform: translateY(-1px);
+}
+.btn.ghost { color: var(--ink-soft); }
+.btn.quantum { border-color: var(--quantum); color: var(--quantum); }
+.btn.quantum:hover { background: var(--quantum); color: #0b1816; }
+.btn.classical { border-color: var(--classical); color: var(--classical); }
+.btn.classical:hover { background: var(--classical); color: #1a0f05; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* =========================================================
+   9. CURSE CHART
+   ========================================================= */
+.curse-chart {
+  margin-top: 3rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 2rem;
+  overflow-x: auto;
+}
+.curse-chart svg { width: 100%; height: auto; min-width: 420px; }
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-top: 2rem;
+}
+@media (max-width: 620px) { .stat-row { grid-template-columns: 1fr; } }
+.stat {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 1.2rem 1.4rem;
+}
+.stat .k {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 0.3rem;
+}
+.stat .v {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 2rem;
+  color: var(--spark);
+  line-height: 1;
+}
+.stat .v small { color: var(--ink-soft); font-size: 0.6em; }
+
+/* =========================================================
+   10. QUANTUM INTRO — SUPERPOSITION
+   ========================================================= */
+.super-demo {
+  margin-top: 2.5rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 2rem;
+  text-align: center;
+}
+.super-demo .bar-row {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 14px;
+  height: 220px;
+  margin: 1.5rem 0;
+}
+.super-bar {
+  flex: 0 0 auto;
+  width: 46px;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  position: relative;
+}
+.super-bar .fill {
+  width: 100%;
+  background: var(--quantum);
+  transition: height 0.8s var(--ease-out), background 0.4s var(--ease);
+  border-radius: 2px 2px 0 0;
+}
+.super-bar .lbl {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--ink-dim);
+  margin-top: 0.6rem;
+}
+.super-demo .explanation {
+  color: var(--ink-soft);
+  font-style: italic;
+  font-size: 1.05rem;
+  min-height: 3.2em;
+  max-width: 54ch;
+  margin: 1rem auto 0;
+}
+
+/* =========================================================
+   11. ALGORITHM PLAYER
+   ========================================================= */
+.player {
+  margin-top: 2rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  overflow: hidden;
+}
+.player-header {
+  padding: 1.3rem 1.8rem;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.step-label {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.5rem;
+  color: var(--ink);
+}
+.step-label .count {
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  color: var(--ink-dim);
+  margin-right: 0.8rem;
+  text-transform: uppercase;
+}
+
+.player-body {
+  padding: 2rem 1.5rem;
+}
+
+/* Circuit diagram */
+.circuit-container {
+  overflow-x: auto;
+  padding: 0.5rem 0;
+  margin-bottom: 1.5rem;
+}
+.circuit-svg {
+  display: block;
+  margin: 0 auto;
+}
+
+/* Amplitude bars visualization */
+.amp-viz {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px dashed var(--line);
+}
+.amp-viz h4 {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 1.2rem;
+  font-weight: 400;
+}
+.amp-bar-row {
+  position: relative;
+  height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 0.5rem;
+}
+.amp-bar-row::before {
+  content: "";
+  position: absolute; left: 0; right: 0; top: 50%;
+  height: 1px;
+  background: var(--line);
+  z-index: 0;
+}
+.amp-bar {
+  flex: 0 1 52px;
+  min-width: 12px;
+  height: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+.amp-bar .fill {
+  position: absolute;
+  left: 4px; right: 4px;
+  top: 50%;
+  background: var(--quantum);
+  height: 0;
+  transition: top 0.7s var(--ease-out), height 0.7s var(--ease-out), background 0.4s var(--ease);
+  border-radius: 2px;
+}
+.amp-bar .fill.negative { background: var(--alert); }
+
+/* Probability mode: bars go from bottom up, using full height */
+.amp-bar-row.prob-mode::before { display: none; }
+.amp-bar-row.prob-mode .amp-bar .fill {
+  top: auto;
+  bottom: 0;
+  background: var(--quantum);
+}
+.amp-bar .lbl {
+  position: absolute;
+  bottom: -1.8rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+/* Hide labels when there are many bars; only show every few */
+.amp-bar-row.dense .amp-bar .lbl { display: none; }
+.amp-bar-row.dense .amp-bar.marked .lbl { display: block; font-size: 0.6rem; }
+.amp-bar .val {
+  position: absolute;
+  top: -1.3rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--ink-soft);
+  opacity: 0;
+  transition: opacity 0.3s var(--ease);
+  white-space: nowrap;
+}
+.amp-bar:hover .val { opacity: 1; }
+
+.amp-legend {
+  display: flex; gap: 1.8rem; justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-top: 2.8rem;
+}
+.amp-legend .chip {
+  display: inline-block; width: 10px; height: 10px;
+  border-radius: 2px;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+}
+.amp-legend .chip.pos { background: var(--quantum); }
+.amp-legend .chip.neg { background: var(--alert); }
+.amp-legend .chip.marked { background: var(--spark); }
+
+/* Grover: highlight the marked bar */
+.amp-bar.marked .fill {
+  outline: 2px solid var(--spark);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+.amp-bar.marked .lbl {
+  color: var(--spark);
+  font-weight: 700;
+}
+
+/* Grover two-column player body */
+.grover-viz-row {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 2rem;
+  align-items: start;
+  margin-top: 1rem;
+}
+@media (max-width: 820px) {
+  .grover-viz-row { grid-template-columns: 1fr; }
+}
+.grover-viz-row > div > h4 {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 1.2rem;
+  font-weight: 400;
+}
+
+.geom-viz {
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.geom-viz svg {
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+}
+.prob-readout {
+  display: flex;
+  gap: 1.8rem;
+  margin-top: 1rem;
+  justify-content: center;
+}
+.prob-readout > div {
+  display: flex; flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+}
+.prob-readout .k {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.prob-readout .v {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.8rem;
+  color: var(--spark);
+  line-height: 1;
+  font-feature-settings: "tnum";
+}
+
+/* Commentary box */
+.commentary {
+  margin-top: 2rem;
+  padding: 1.2rem 1.4rem;
+  border-left: 3px solid var(--quantum);
+  background: var(--bg);
+  border-radius: 0 var(--radius-s) var(--radius-s) 0;
+  font-style: italic;
+  color: var(--ink-soft);
+  min-height: 3.4em;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+/* Player controls */
+.player-controls {
+  display: flex;
+  gap: 0.7rem;
+  align-items: center;
+  justify-content: center;
+  padding: 1.2rem 1.5rem;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+  flex-wrap: wrap;
+}
+.player-controls .spacer { flex: 1; }
+.step-dots {
+  display: flex; gap: 6px;
+  align-items: center;
+}
+.step-dots .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--line);
+  transition: all 0.3s var(--ease);
+}
+.step-dots .dot.active { background: var(--spark); transform: scale(1.3); }
+.step-dots .dot.done   { background: var(--quantum); }
+
+/* Oracle picker */
+.oracle-picker {
+  display: flex; gap: 0.6rem; align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  flex-wrap: wrap;
+}
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+.seg button {
+  background: transparent;
+  border: none;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  padding: 0.6em 0.9em;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: all 0.2s;
+  border-right: 1px solid var(--line);
+}
+.seg button:last-child { border-right: none; }
+.seg button.active {
+  background: var(--spark);
+  color: #1a1509;
+  font-weight: 700;
+}
+.seg button:hover:not(.active) { background: var(--bg-lift); color: var(--ink); }
+
+/* =========================================================
+   12. SANDBOX
+   ========================================================= */
+.sandbox {
+  margin-top: 2rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 2rem;
+}
+.sb-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.3rem 2rem;
+  padding-bottom: 1.8rem;
+  margin-bottom: 1.8rem;
+  border-bottom: 1px solid var(--line);
+}
+@media (max-width: 640px) { .sb-controls { grid-template-columns: 1fr; } }
+.ctrl {
+  display: flex; flex-direction: column; gap: 0.55rem;
+}
+.ctrl label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.ctrl .value {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.5rem;
+  color: var(--spark);
+  line-height: 1;
+}
+.slider {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 4px;
+  background: var(--line);
+  border-radius: 999px;
+  outline: none;
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px; height: 18px;
+  background: var(--spark);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.slider::-webkit-slider-thumb:hover { transform: scale(1.18); }
+.slider::-moz-range-thumb {
+  width: 18px; height: 18px;
+  background: var(--spark);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.sb-text {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 0.7em 0.9em;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.sb-text:focus { border-color: var(--spark); }
+
+.sb-result {
+  margin-top: 2rem;
+  padding: 1.4rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
+.sb-result .step-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 1rem; flex-wrap: wrap;
+  margin-bottom: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.sb-result .final-answer {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.8rem;
+}
+.sb-result .final-answer.constant { color: var(--classical); }
+.sb-result .final-answer.balanced { color: var(--quantum); }
+.sb-result .final-answer.solved   { color: var(--spark); }
+
+/* Simon shots table */
+.shot-table {
+  display: grid;
+  grid-template-columns: auto auto auto 1fr;
+  gap: 0;
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+.shot-table > div {
+  padding: 0.55rem 1rem;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex; align-items: center;
+}
+.shot-table > div:nth-last-child(-n+4) { border-bottom: none; }
+.shot-table .sh { background: var(--bg-lift); color: var(--ink-dim); font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase; }
+.shot-table .sh-idx { color: var(--ink-dim); }
+.shot-table .sh-y   { color: var(--ink); font-weight: 500; }
+.shot-table .sh-eq  { color: var(--ink-soft); }
+.shot-table .sh-note { color: var(--ink-dim); font-size: 0.78rem; }
+.shot-table .row-useful .sh-note { color: var(--quantum); }
+.shot-table .row-redundant .sh-note { color: var(--ink-dim); }
+.shot-table .row-zero .sh-note { color: var(--classical); }
+
+.shot-table .row-useful .sh-y { color: var(--quantum); }
+
+/* =========================================================
+   13. OUTRO
+   ========================================================= */
+#outro {
+  background: var(--bg-soft);
+  border-top: 1px solid var(--line);
+  margin-top: 4rem;
+}
+.series-list {
+  margin-top: 2rem;
+  list-style: none;
+  padding: 0;
+}
+.series-list li {
+  padding: 1.1rem 0;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 1.5rem;
+}
+.series-list li:last-child { border-bottom: none; }
+.series-list .num {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+  color: var(--ink-dim);
+  min-width: 3ch;
+}
+.series-list .name {
+  flex: 1;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.4rem;
+  color: var(--ink);
+}
+.series-list .name .done {
+  color: var(--quantum);
+  margin-left: 0.5rem;
+  font-style: normal;
+  font-size: 0.8em;
+}
+.series-list .name .here {
+  color: var(--spark);
+  margin-left: 0.5rem;
+  font-style: normal;
+  font-size: 0.75em;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+}
+.series-list .status {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+}
+
+footer {
+  padding: 3rem 1.5rem 4rem;
+  text-align: center;
+  border-top: 1px solid var(--line);
+  color: var(--ink-dim);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+}
+footer a { color: var(--ink-soft); text-decoration: none; border-bottom: 1px solid var(--line); }
+footer a:hover { color: var(--spark); border-color: var(--spark); }
+
+/* =========================================================
+   14. REVEALS
+   ========================================================= */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.9s var(--ease-out), transform 0.9s var(--ease-out);
+}
+.reveal.seen { opacity: 1; transform: translateY(0); }
+
+/* =========================================================
+   15. RESPONSIVE
+   ========================================================= */
+@media (max-width: 540px) {
+  section { padding: 6rem 1rem; }
+  body    { font-size: 16px; }
+  .game-board, .player, .sandbox { padding: 1.3rem; }
+  .player-body { padding: 1.2rem 0.6rem; }
+  .amp-bar-row { gap: 6px; height: 180px; }
+  .amp-bar .lbl { font-size: 0.58rem; }
+  .circuit-container { margin: 0 -0.6rem; padding: 0 0.6rem; }
+}
+</style>
+</head>
+<body>
+
+<nav class="rail" aria-label="Section progress">
+  <a href="#hero"      data-label="Start"></a>
+  <a href="#promise"   data-label="The promise"></a>
+  <a href="#classical" data-label="Classical"></a>
+  <a href="#curse"     data-label="Scaling"></a>
+  <a href="#quantum"   data-label="Quantum idea"></a>
+  <a href="#algorithm" data-label="Algorithm"></a>
+  <a href="#sandbox"   data-label="Sandbox"></a>
+  <a href="#outro"     data-label="What's next"></a>
+</nav>
+
+<!-- ===================================================
+     SECTION 1: HERO
+     =================================================== -->
+<section id="hero">
+  <div class="hero-bg"><svg id="hero-bars" viewBox="0 0 900 260" preserveAspectRatio="none" aria-hidden="true"></svg></div>
+  <div class="container">
+    <div class="hero-eyebrow"><span class="dot"></span>A hands-on introduction · Quantum algorithms series · №04</div>
+    <h1 class="display">
+      <span>Grover's&nbsp;Search</span>
+    </h1>
+    <p class="hero-sub">A needle in a haystack, found in √N tries instead of N — and the geometry that explains it.</p>
+    <div class="hero-meta">
+      <div>Reading time<b>~ 12 minutes</b></div>
+      <div>Prerequisites<b>None strictly needed</b></div>
+      <div>Runs on<b>Your browser</b></div>
+    </div>
+    <div class="scroll-cue">Scroll</div>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 2: THE SETUP
+     =================================================== -->
+<section id="promise">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act I">A needle in a haystack.</h2>
+    <p class="lead narrow">A new kind of box, and a very different kind of problem. This one takes an <span class="mono">n</span>-bit input and answers a single yes/no question: "is <span class="mono">x</span> the one I'm looking for?" Among the <span class="mono">N = 2ⁿ</span> possible inputs, exactly one — the <em>marked</em> item — returns <span class="mono">1</span>. Everything else returns <span class="mono">0</span>. Your job: find the marked item.</p>
+
+    <div class="promise-grid">
+      <article class="promise-card constant">
+        <div class="label">The oracle</div>
+        <h3>All zeros, except one.</h3>
+        <p>A checker. For the marked item <span class="mono">m</span> it returns <span class="mono">1</span>. For every other input, <span class="mono">0</span>.</p>
+        <div class="truth-table" id="tt-constant"></div>
+      </article>
+      <article class="promise-card balanced">
+        <div class="label">What you can't do</div>
+        <h3>No structure.</h3>
+        <p>Unlike every previous box in this series, there's no algebraic shortcut. The marked item has no periodic structure, no linear pattern — it's just <em>somewhere</em>. The haystack is truly unstructured.</p>
+        <div class="truth-table" id="tt-balanced"></div>
+        <button class="btn ghost" id="shuffle-balanced" style="margin-top:1.2rem">New marked item ↻</button>
+      </article>
+    </div>
+
+    <p class="narrow" style="margin-top:3rem"><em>The question is simple.</em> Given this kind of box, how many queries do you need to find the marked item?</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 3: CLASSICAL GAME — unstructured search
+     =================================================== -->
+<section id="classical">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act II">Search it classically.</h2>
+    <p class="lead narrow">Below is a grid of 16 boxes. Exactly one of them is marked — the rest are empty. Click boxes one at a time to check them. On average you'll need <strong>N/2 = 8 checks</strong> to find the marked one. In the worst case, all 16.</p>
+
+    <aside class="rules-box">
+      <div class="rules-label">How unstructured search works</div>
+      <p>With no clues about where the marked item is, every box you check is as likely as any other to hold the answer. The best classical strategy is simply to check them one by one in some order. After <span class="mono">k</span> checks, the probability of having found the marked item is <span class="mono">k/N</span>. There's no trick that does better in general.</p>
+      <p style="margin-bottom:0">For <span class="mono">N = 16</span> that's up to 16 queries. For <span class="mono">N = 10⁶</span>, up to a million. A quantum computer, as you'll see, does it in <span class="mono">√N</span> — so 4 queries for <span class="mono">N = 16</span>, and a thousand for <span class="mono">N = 10⁶</span>.</p>
+    </aside>
+
+    <div class="game-board">
+      <div class="game-header">
+        <div class="game-title">The haystack</div>
+        <div class="query-counter">
+          <span>Queries</span>
+          <span class="n" id="q-count">0</span>
+        </div>
+      </div>
+
+      <div class="haystack-grid" id="haystack-grid"></div>
+
+      <div class="verdict" id="verdict"></div>
+
+      <div style="margin-top:1.5rem; display:flex; gap:0.6rem; flex-wrap:wrap">
+        <button class="btn ghost" id="reset-game">New marked item ↻</button>
+      </div>
+    </div>
+
+    <p class="narrow" style="margin-top:3rem">Classical search scales linearly: to find one marked item in <span class="mono">N</span>, you'll typically check <span class="mono">N/2</span> and in the worst case <span class="mono">N</span>. Grover's algorithm takes about <em>√N</em> queries. That's the quadratic gap we're going to build in the next sections.</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 4: THE COST
+     =================================================== -->
+<section id="curse">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act III">Quadratic, not exponential.</h2>
+    <p class="lead narrow">Classical unstructured search over <span class="mono">N</span> items costs <strong>N/2</strong> queries on average, <strong>N</strong> in the worst case. Grover's algorithm needs about <strong>√N</strong>. This is a <em>quadratic</em> speedup — less dramatic than Simon's exponential gap, but it applies to <em>any</em> search problem you can pose as "is this the answer?" That generality is why Grover matters.</p>
+
+    <div class="curse-chart"><svg viewBox="0 0 760 360" id="curse-svg" aria-label="Classical linear vs quantum sqrt"></svg></div>
+
+    <div class="stat-row">
+      <div class="stat"><div class="k">N = 1,000</div><div class="v">500 <small>classical · ~32 quantum</small></div></div>
+      <div class="stat"><div class="k">N = 10⁶</div><div class="v">500,000 <small>classical · ~1,000 quantum</small></div></div>
+      <div class="stat"><div class="k">N = 10⁹</div><div class="v">5·10⁸ <small>classical · ~31,600 quantum</small></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 5: QUANTUM IDEA
+     =================================================== -->
+<section id="quantum">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act IV">Rotations, not cancellations.</h2>
+    <p class="lead narrow">Grover's algorithm works differently from the three that came before. DJ, BV, and Simon rely on phase kickback followed by a Hadamard collision that cancels everything except the answer. Grover uses a subtler mechanism: each iteration <em>rotates</em> the quantum state a tiny angle closer to the marked item. Do the rotations the right number of times and you land exactly on the answer.</p>
+
+    <p class="narrow">Start, as usual, with a uniform superposition of all <span class="mono">N</span> inputs. Now split that state into two parts: the amplitude on the marked item, and the amplitude on everything else. Those two pieces span a 2D plane. <em>Every</em> step of Grover's algorithm is just a rotation inside that plane.</p>
+
+    <div class="super-demo">
+      <div class="bar-row" id="super-bars"></div>
+      <div class="explanation" id="super-text">The register starts in the state <span class="mono">|0…0⟩</span>. One amplitude is 1, the rest are 0.</div>
+      <div style="margin-top:1.4rem; display:flex; gap:0.7rem; justify-content:center; flex-wrap:wrap">
+        <button class="btn quantum" id="super-hadamard">Apply H⊗³</button>
+        <button class="btn ghost"    id="super-reset">Reset</button>
+      </div>
+    </div>
+
+    <p class="narrow" style="margin-top:3rem">At this point every one of the <span class="mono">N = 8</span> amplitudes is <span class="mono">1/√8 ≈ 0.354</span>. The marked item has the same amplitude as every other item — we haven't done anything yet. What Grover does next is ingenious: an <em>oracle</em> flips the sign of the marked amplitude, then a <em>diffusion</em> step reflects everything around the average. The geometric effect: the state rotates a little toward the marked item. Each iteration rotates again. After about <span class="mono">(π/4)√N</span> rotations, the state points almost exactly at the marked item — and a measurement finds it.</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 6: ALGORITHM
+     =================================================== -->
+<section id="algorithm">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act V">The rotation in action.</h2>
+    <p class="lead narrow">Here is Grover's algorithm for <span class="mono">n = 3</span> qubits (<span class="mono">N = 8</span> items). Step through the iterations. Watch the amplitude on the marked item grow. Watch the geometric view on the right — each step is a rotation by a fixed angle <span class="mono">2θ</span> toward the marked state.</p>
+
+    <div class="oracle-picker" style="margin-top:1.8rem; margin-bottom:1rem">
+      <span>Marked item:</span>
+      <div class="seg" id="seg-oracle">
+        <button data-s="001">m = 001</button>
+        <button data-s="011">m = 011</button>
+        <button data-s="101" class="active">m = 101</button>
+        <button data-s="110">m = 110</button>
+        <button data-s="111">m = 111</button>
+      </div>
+    </div>
+
+    <div class="player">
+      <div class="player-header">
+        <div class="step-label"><span class="count" id="step-count">Step 0 / 6</span><span id="step-name">Initial state</span></div>
+        <div class="step-dots" id="step-dots"></div>
+      </div>
+
+      <div class="player-body">
+        <div class="circuit-container">
+          <svg class="circuit-svg" id="circuit-svg" viewBox="0 0 720 220" aria-label="Grover circuit diagram"></svg>
+        </div>
+
+        <div class="grover-viz-row">
+          <div class="amp-viz">
+            <h4>Amplitudes across the 8 items</h4>
+            <div class="amp-bar-row" id="amp-bars"></div>
+            <div class="amp-legend">
+              <span><span class="chip pos"></span>Positive</span>
+              <span><span class="chip neg"></span>Negative</span>
+              <span><span class="chip marked"></span>Marked item</span>
+            </div>
+          </div>
+          <div class="geom-viz">
+            <h4>Geometric view</h4>
+            <svg viewBox="0 0 320 320" id="geom-svg" aria-label="Grover state rotation on the 2D plane"></svg>
+            <div class="prob-readout" id="prob-readout">
+              <div><span class="k">P(marked)</span><span class="v" id="p-marked">0.000</span></div>
+              <div><span class="k">Angle θ</span><span class="v" id="p-angle">0.0°</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="commentary" id="commentary">Everything starts quiet. All 8 qubits in <span class="mono">|0⟩</span>.</div>
+      </div>
+
+      <div class="player-controls">
+        <button class="btn" id="player-prev">← Prev</button>
+        <button class="btn primary" id="player-play">▶ Play</button>
+        <button class="btn" id="player-next">Next →</button>
+        <div class="spacer"></div>
+        <button class="btn ghost" id="player-reset">Restart</button>
+      </div>
+    </div>
+
+    <p class="narrow" style="margin-top:3rem">The optimal number of iterations is about <span class="mono">(π/4)√N</span>. For <span class="mono">N = 8</span> that's about 2 — and indeed, after 2 Grover iterations the probability of measuring the marked item is 94.5%. A third iteration would actually <em>reduce</em> it: keep rotating and you overshoot the target. Grover's isn't a "more is better" algorithm.</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 7: FREE PLAY
+     =================================================== -->
+<section id="sandbox">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act VI">Free play.</h2>
+    <p class="lead narrow">Pick any number of qubits, any marked item, any number of iterations. Watch where the probability of measuring the marked item peaks — and how it <em>falls</em> if you keep iterating past the sweet spot.</p>
+
+    <div class="sandbox">
+      <div class="sb-controls">
+        <div class="ctrl">
+          <label>Number of qubits · <span class="value" id="sb-n-val">3</span></label>
+          <input type="range" class="slider" id="sb-n" min="2" max="6" value="3" step="1" />
+        </div>
+        <div class="ctrl">
+          <label>Marked item m</label>
+          <input type="text" class="sb-text" id="sb-s" value="101" />
+        </div>
+        <div class="ctrl" style="grid-column:1 / -1">
+          <label>Iterations k · <span class="value" id="sb-k-val">2</span> · <span id="sb-k-optimal" style="color:var(--ink-dim); font-family:var(--font-mono); font-size:0.78rem; letter-spacing:0.1em"></span></label>
+          <input type="range" class="slider" id="sb-k" min="0" max="20" value="2" step="1" />
+        </div>
+      </div>
+
+      <div style="display:flex; gap:0.8rem; align-items:center; flex-wrap:wrap">
+        <button class="btn primary" id="sb-run">▶ Run circuit</button>
+        <button class="btn ghost"   id="sb-random">Random marked ↻</button>
+      </div>
+
+      <div class="sb-result" id="sb-result" style="display:none">
+        <div class="step-head">
+          <span>Amplitude distribution</span>
+          <span id="sb-verdict" class="final-answer">—</span>
+        </div>
+        <div class="amp-bar-row" id="sb-amp-bars" style="height:220px"></div>
+        <p style="color:var(--ink-soft); margin-top:1.6rem; font-size:0.95rem" id="sb-comment">—</p>
+      </div>
+    </div>
+
+    <p class="narrow" style="margin-top:3rem">One counterintuitive feature of Grover's: the probability oscillates. After the optimal <span class="mono">k*</span> iterations it's maximal; one more iteration and it <em>decreases</em>. The state is still rotating in the plane — we've just gone past the marked axis. Set <span class="mono">k</span> well beyond the optimum and you can drive the probability back near zero.</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 8: OUTRO
+     =================================================== -->
+<section id="outro">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Coda">Square roots everywhere.</h2>
+    <p class="narrow">Grover's algorithm is the most widely applicable result in this series. Any problem where you can check a candidate answer in polynomial time — SAT, graph coloring, subset-sum, password brute force — inherits a quadratic speedup from Grover. It's not the earth-shattering advantage of Shor, but it's a universal one.</p>
+
+    <p class="narrow">It's also provably optimal: no quantum algorithm can search an unstructured haystack faster than <span class="mono">√N</span>. Grover is the speed limit. That makes it the natural cryptographic threat model: doubling a symmetric key length is a reasonable defense against a quantum-equipped adversary, because Grover cuts effective key strength in half, not to zero.</p>
+
+    <h3 style="margin-top:3.5rem; font-style:italic">The series so far.</h3>
+    <ul class="series-list">
+      <li><span class="num">01</span><span class="name">Deutsch–Jozsa <span class="done">✓</span></span><span class="status">Published</span></li>
+      <li><span class="num">02</span><span class="name">Bernstein–Vazirani <span class="done">✓</span></span><span class="status">Published</span></li>
+      <li><span class="num">03</span><span class="name">Simon's algorithm <span class="done">✓</span></span><span class="status">Published</span></li>
+      <li><span class="num">04</span><span class="name">Grover's search <span class="here">you are here</span></span><span class="status">Published</span></li>
+      <li><span class="num">05</span><span class="name">Quantum Phase Estimation</span><span class="status">Next</span></li>
+      <li><span class="num">06</span><span class="name">Shor's factoring</span><span class="status">Planned</span></li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  Built as an open invitation to play. Source on <a href="#" id="gh-link">GitHub</a>.
+  No cookies. No tracking. Your browser does all the quantum math.
+</footer>
+
+<script>
+"use strict";
+
+/* =========================================================
+   SIMULATOR — real quantum state on 2^(n+1) amplitudes
+   DJ is an algorithm where all amplitudes stay real, so we
+   use plain Float64Array.
+   ========================================================= */
+const INV_SQRT2 = 1 / Math.sqrt(2);
+
+function newState(numQubits) {
+  const dim = 1 << numQubits;
+  const amp = new Float64Array(dim);
+  amp[0] = 1;
+  return { numQubits, dim, amp };
+}
+function cloneState(s) {
+  return { numQubits: s.numQubits, dim: s.dim, amp: new Float64Array(s.amp) };
+}
+function applyX(s, q) {
+  const a = s.amp, mask = 1 << q;
+  for (let i = 0; i < s.dim; i++) {
+    if ((i & mask) === 0) {
+      const j = i | mask;
+      const t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+  }
+}
+function applyH(s, q) {
+  const a = s.amp, mask = 1 << q;
+  for (let i = 0; i < s.dim; i++) {
+    if ((i & mask) === 0) {
+      const j = i | mask;
+      const ai = a[i], aj = a[j];
+      a[i] = (ai + aj) * INV_SQRT2;
+      a[j] = (ai - aj) * INV_SQRT2;
+    }
+  }
+}
+function applyCNOT(s, ctrl, tgt) {
+  const a = s.amp, cMask = 1 << ctrl, tMask = 1 << tgt;
+  for (let i = 0; i < s.dim; i++) {
+    if ((i & cMask) && !(i & tMask)) {
+      const j = i | tMask;
+      const t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+  }
+}
+
+/* Project total state onto |-> on the output qubit (index nInputs).
+   Returns signed real amplitudes for the input register only.
+   Valid after the output qubit has been put in |-> and left alone;
+   that's exactly the case throughout DJ. */
+function inputAmplitudesMinus(s, nInputs) {
+  const out = new Float64Array(1 << nInputs);
+  const outMask = 1 << nInputs;
+  for (let x = 0; x < out.length; x++) {
+    out[x] = (s.amp[x] - s.amp[x | outMask]) * INV_SQRT2;
+  }
+  return out;
+}
+
+/* Oracle builders return arrays of gate ops: ["H", q], ["X", q], ["CNOT", c, t] */
+function constantOracleGates(n, value) {
+  return value === 1 ? [["X", n]] : [];
+}
+function balancedOracleGates(n, b) {
+  // f(x) = b . x  (mod 2)  — implemented as one CNOT per bit where b_i = 1.
+  // This is balanced iff b != 0...0. The measurement outcome of the DJ
+  // algorithm on this oracle is exactly the string b, which makes the
+  // quantum trick visceral: you literally "see" the oracle's signature.
+  const gates = [];
+  for (let i = 0; i < n; i++) {
+    if (b[n - 1 - i] === "1") gates.push(["CNOT", i, n]);
+  }
+  return gates;
+}
+/* Simon's oracle: f is 2-to-1 with hidden period s.
+   Input qubits 0..n-1, output qubits n..2n-1.
+   Construction:
+     1. CNOT input_i -> output_i for each i  (copies x into output).
+     2. Let k be the highest bit with s_k = 1.
+     3. For each j where s_j = 1, CNOT input_k -> output_j.
+   f(x) = x if x_k = 0, else f(x) = x XOR s. Satisfies f(x) = f(x XOR s). */
+function simonOracleGates(n, s) {
+  const gates = [];
+  for (let i = 0; i < n; i++) gates.push(["CNOT", i, n + i]);
+  let k = -1;
+  for (let i = n - 1; i >= 0; i--) {
+    if (s[n - 1 - i] === "1") { k = i; break; }
+  }
+  if (k === -1) return gates;
+  for (let j = 0; j < n; j++) {
+    if (s[n - 1 - j] === "1") gates.push(["CNOT", k, n + j]);
+  }
+  return gates;
+}
+
+/* Marginal probability distribution on the input register,
+   tracing over output. */
+function inputRegisterProbs(state, nInput) {
+  const size = 1 << nInput;
+  const mask = size - 1;
+  const probs = new Float64Array(size);
+  for (let idx = 0; idx < state.dim; idx++) {
+    const x = idx & mask;
+    probs[x] += state.amp[idx] * state.amp[idx];
+  }
+  return probs;
+}
+
+function applyGate(s, g) {
+  if (g[0] === "X")     applyX(s, g[1]);
+  else if (g[0] === "H") applyH(s, g[1]);
+  else if (g[0] === "CNOT") applyCNOT(s, g[1], g[2]);
+}
+
+/* =========================================================
+   GROVER CORE
+   =========================================================
+   Grover operates on a single register of n qubits (N = 2^n).
+   The signed amplitudes are real throughout (the oracle flips
+   signs, the diffusion is inversion about the mean), so we can
+   use a plain Float64Array of length N.
+   ========================================================= */
+
+/* Oracle: flip the sign of the amplitude on the marked index m. */
+function applyGroverOracle(amps, marked) {
+  amps[marked] = -amps[marked];
+}
+
+/* Diffusion operator: inversion about the mean.
+   amps[x] -> 2*mean - amps[x] */
+function applyDiffusion(amps) {
+  let mean = 0;
+  for (let i = 0; i < amps.length; i++) mean += amps[i];
+  mean /= amps.length;
+  for (let i = 0; i < amps.length; i++) amps[i] = 2 * mean - amps[i];
+}
+
+/* Optimal number of Grover iterations for one marked item in N.
+   Using floor((π/4)√N) gives the first integer k at which the state
+   is closest to the marked axis without overshooting. */
+function groverOptimalK(N) {
+  return Math.max(1, Math.floor((Math.PI / 4) * Math.sqrt(N)));
+}
+
+/* Build the sequence of "scenes" for the algorithm player.
+   For n = 3 (N = 8), the optimal number of iterations is 2.
+   We show: init, H (uniform superposition), then oracle+diffusion
+   for each of 2 iterations, then measure. */
+function buildScenes(n, marked) {
+  const N = 1 << n;
+  const markedIdx = parseInt(marked, 2);
+  const kOpt = groverOptimalK(N);
+  const amps = new Float64Array(N);
+  amps[0] = 1;
+
+  const scenes = [];
+  scenes.push({
+    label: "Initial state",
+    commentary: `All ${n} qubits in <span class="mono">|0⟩</span>. A single amplitude sits on <span class="mono">|${"0".repeat(n)}⟩</span>; the marked item <span class="mono">|${marked}⟩</span> hasn't been touched.`,
+    phase: "init",
+    values: Array.from(amps),
+    marked: markedIdx,
+  });
+
+  // Step 1: Hadamards to create uniform superposition
+  const uniform = 1 / Math.sqrt(N);
+  for (let i = 0; i < N; i++) amps[i] = uniform;
+  scenes.push({
+    label: "Hadamards — uniform superposition",
+    commentary: `One Hadamard on every qubit. All ${N} amplitudes equal to <span class="mono">1/√${N} ≈ ${uniform.toFixed(3)}</span>. Every item — including the marked one — has probability <span class="mono">1/${N}</span> of being measured right now. That's no better than a random guess. The magic is in the next steps.`,
+    phase: "uniform",
+    values: Array.from(amps),
+    marked: markedIdx,
+  });
+
+  // Now do kOpt iterations, each contributing two scenes: oracle + diffusion
+  for (let k = 1; k <= kOpt; k++) {
+    applyGroverOracle(amps, markedIdx);
+    scenes.push({
+      label: `Iteration ${k} · Oracle`,
+      commentary: `The oracle flips the sign of the amplitude on <span class="mono">|${marked}⟩</span>. All other amplitudes are unchanged. The average of the amplitudes has just dropped a little — that's the hook the diffusion step will exploit.`,
+      phase: "oracle",
+      values: Array.from(amps),
+      marked: markedIdx,
+      iteration: k,
+    });
+
+    applyDiffusion(amps);
+    scenes.push({
+      label: `Iteration ${k} · Diffusion`,
+      commentary: `Inversion about the mean: every amplitude is reflected across the current average. The flipped marked amplitude, being well below the mean, shoots up. The others shrink slightly. Net effect: the marked amplitude has grown. Geometrically, the state has just rotated a fixed angle closer to the marked axis.`,
+      phase: "diffusion",
+      values: Array.from(amps),
+      marked: markedIdx,
+      iteration: k,
+    });
+  }
+
+  // Final scene: measurement outcome (collapse to marked)
+  const collapsed = new Float64Array(N);
+  collapsed[markedIdx] = 1;
+  const pMarked = amps[markedIdx] * amps[markedIdx];
+  scenes.push({
+    label: "Measure",
+    commentary: `After ${kOpt} iteration${kOpt === 1 ? '' : 's'}, the probability of measuring the marked item is <span class="mono">${(pMarked * 100).toFixed(1)}%</span>. Any further iterations would rotate past the marked axis and <em>decrease</em> the probability. For <span class="mono">N = ${N}</span>, <span class="mono">${kOpt}</span> is optimal.`,
+    phase: "measure",
+    values: Array.from(collapsed),
+    marked: markedIdx,
+    isFinal: true,
+  });
+
+  return { scenes, marked, markedIdx, n, N, kOpt };
+}
+
+/* =========================================================
+   RENDER HELPERS
+   ========================================================= */
+function pad(x, n) { return x.toString(2).padStart(n, "0"); }
+
+/* --------- HERO BACKGROUND BARS ---------- */
+(function heroBars() {
+  const svg = document.getElementById("hero-bars");
+  const N = 32;
+  const W = 900, H = 260;
+  let out = "";
+  for (let i = 0; i < N; i++) {
+    const x = (W / N) * i + 4;
+    const h = 30 + Math.random() * 180;
+    const y = H/2 - h/2;
+    const color = Math.random() > 0.5 ? "#7bd3c8" : "#e89a5a";
+    const dur = (2 + Math.random() * 2).toFixed(2);
+    const delay = (Math.random() * 3).toFixed(2);
+    out += `<rect x="${x}" y="${y}" width="${(W/N) - 8}" height="${h}" fill="${color}" opacity="0.8">
+      <animate attributeName="height" values="${h};${h * 0.4};${h}" dur="${dur}s" begin="${delay}s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="${y};${y + h*0.3};${y}" dur="${dur}s" begin="${delay}s" repeatCount="indefinite"/>
+    </rect>`;
+  }
+  svg.innerHTML = out;
+})();
+
+/* --------- PROMISE SECTION: ORACLE EXAMPLES ---------- */
+const PROMISE_N = 3;
+
+function randomMarked(n) {
+  return pad(Math.floor(Math.random() * (1 << n)), n);
+}
+
+function renderOracleCard(m) {
+  // Card 1: list every input → f(x), highlighting the marked one.
+  const n = m.length;
+  const size = 1 << n;
+  let html = `<div class="hx">x</div><div class="hy">f(x)</div>`;
+  for (let x = 0; x < size; x++) {
+    const xs = pad(x, n);
+    const isMarked = xs === m;
+    const v = isMarked ? 1 : 0;
+    html += `<div class="hx${isMarked ? ' marked-row' : ''}">${xs}${isMarked ? ' ★' : ''}</div>`;
+    html += `<div class="val ${v === 1 ? 'one' : 'zero'}">${v}</div>`;
+  }
+  document.getElementById("tt-constant").innerHTML = html;
+}
+
+function renderContrastCard(m) {
+  // Card 2: a few sample queries just to underscore "most are zero"
+  const n = m.length;
+  const examples = ["000", "010", m, "011", "110"].filter((v, i, arr) => arr.indexOf(v) === i).slice(0, 5);
+  let html = `<div class="hx">x</div><div class="hy">f(x)</div>`;
+  for (const x of examples) {
+    const v = x === m ? 1 : 0;
+    const isMarked = x === m;
+    html += `<div class="hx${isMarked ? ' marked-row' : ''}">${x}${isMarked ? ' ★' : ''}</div>`;
+    html += `<div class="val ${v === 1 ? 'one' : 'zero'}">${v}</div>`;
+  }
+  document.getElementById("tt-balanced").innerHTML = html;
+}
+
+let demoMarked = randomMarked(PROMISE_N);
+renderOracleCard(demoMarked);
+renderContrastCard(demoMarked);
+document.getElementById("shuffle-balanced").addEventListener("click", () => {
+  demoMarked = randomMarked(PROMISE_N);
+  renderOracleCard(demoMarked);
+  renderContrastCard(demoMarked);
+});
+
+/* =========================================================
+   CLASSICAL GAME — unstructured search
+   ========================================================= */
+const GAME_N = 4;                 // 16 boxes
+const GAME_SIZE = 1 << GAME_N;
+let gameMarkedIdx = -1;
+let gameChecked = new Set();
+let gameFound = false;
+
+function renderHaystack() {
+  const grid = document.getElementById("haystack-grid");
+  grid.innerHTML = "";
+  for (let i = 0; i < GAME_SIZE; i++) {
+    const cell = document.createElement("div");
+    cell.className = "hay-cell";
+    cell.dataset.idx = i;
+    const label = pad(i, GAME_N);
+    cell.innerHTML = `<span class="label">${label}</span><span class="x-mark"></span>`;
+    cell.addEventListener("click", () => checkCell(i));
+    grid.appendChild(cell);
+  }
+  document.getElementById("q-count").textContent = "0";
+  document.getElementById("verdict").className = "verdict";
+}
+
+function checkCell(idx) {
+  if (gameFound || gameChecked.has(idx)) return;
+  gameChecked.add(idx);
+  const cell = document.querySelector(`.hay-cell[data-idx="${idx}"]`);
+  const xmark = cell.querySelector(".x-mark");
+  if (idx === gameMarkedIdx) {
+    gameFound = true;
+    cell.classList.add("found");
+    xmark.textContent = "★";
+    // Lock everything
+    document.querySelectorAll(".hay-cell").forEach(c => c.classList.add("locked"));
+    // Verdict
+    const n = gameChecked.size;
+    const v = document.getElementById("verdict");
+    v.className = "verdict show win";
+    const avg = GAME_SIZE / 2;
+    const note = n === 1
+      ? `Pure luck — in the worst case you'd have needed up to ${GAME_SIZE}.`
+      : n < avg
+      ? `Better than average (${avg}). Still, a quantum computer would have found it in about ${Math.round((Math.PI/4) * Math.sqrt(GAME_SIZE))} queries.`
+      : n === GAME_SIZE
+      ? `Worst case — last box checked. On average you'd expect ${avg}.`
+      : `Above average (${avg}) but within worst-case bounds. A quantum computer would have used about ${Math.round((Math.PI/4) * Math.sqrt(GAME_SIZE))} queries.`;
+    v.innerHTML = `<b>Found it — in ${n} quer${n === 1 ? 'y' : 'ies'}.</b> ${note}`;
+  } else {
+    cell.classList.add("checked");
+    xmark.textContent = "×";
+  }
+  document.getElementById("q-count").textContent = gameChecked.size;
+}
+
+function resetGroverGame() {
+  gameMarkedIdx = Math.floor(Math.random() * GAME_SIZE);
+  gameChecked = new Set();
+  gameFound = false;
+  renderHaystack();
+}
+
+document.getElementById("reset-game").addEventListener("click", resetGroverGame);
+resetGroverGame();
+
+/* =========================================================
+   COST CHART — linear classical vs sqrt quantum
+   ========================================================= */
+(function curseChart() {
+  const svg = document.getElementById("curse-svg");
+  const W = 760, H = 360, PAD_L = 60, PAD_R = 20, PAD_T = 30, PAD_B = 50;
+  const maxN = 1000;
+  const ns = [];
+  for (let i = 4; i <= maxN; i *= 2) ns.push(i);
+  ns.push(maxN);
+  const classical = ns.map(N => N / 2);
+  const quantum = ns.map(N => Math.sqrt(N));
+  const maxVal = classical[classical.length - 1];
+  const minLog = 0, maxLog = Math.log10(maxVal);
+
+  const px = (N) => PAD_L + (Math.log2(N) - Math.log2(ns[0])) / (Math.log2(maxN) - Math.log2(ns[0])) * (W - PAD_L - PAD_R);
+  const py = (v) => PAD_T + (1 - (Math.log10(Math.max(v, 1)) - minLog) / (maxLog - minLog)) * (H - PAD_T - PAD_B);
+
+  let html = "";
+  for (let k = 0; k <= Math.ceil(maxLog); k++) {
+    const v = Math.pow(10, k);
+    if (v > maxVal) break;
+    const y = py(v);
+    html += `<line x1="${PAD_L}" y1="${y}" x2="${W - PAD_R}" y2="${y}" stroke="#3a3128" stroke-width="0.5" stroke-dasharray="2,3"/>`;
+    html += `<text x="${PAD_L - 8}" y="${y + 4}" text-anchor="end" fill="#8a806d" font-family="JetBrains Mono" font-size="10">10^${k}</text>`;
+  }
+  // X-axis: N = 4, 16, 64, 256, 1024
+  const xTicks = [4, 16, 64, 256, 1024];
+  for (const N of xTicks) {
+    if (N > maxN) continue;
+    html += `<text x="${px(N)}" y="${H - PAD_B + 18}" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="10">N=${N}</text>`;
+  }
+  html += `<line x1="${PAD_L}" y1="${PAD_T}" x2="${PAD_L}" y2="${H - PAD_B}" stroke="#3a3128"/>`;
+  html += `<line x1="${PAD_L}" y1="${H - PAD_B}" x2="${W - PAD_R}" y2="${H - PAD_B}" stroke="#3a3128"/>`;
+
+  const classicalPts = ns.map((N, i) => `${px(N)},${py(classical[i])}`).join(" ");
+  html += `<polyline points="${classicalPts}" fill="none" stroke="#e89a5a" stroke-width="2.2" stroke-linejoin="round"/>`;
+  for (let i = 0; i < ns.length; i++) {
+    if (xTicks.includes(ns[i])) {
+      html += `<circle cx="${px(ns[i])}" cy="${py(classical[i])}" r="4.5" fill="#e89a5a" stroke="#17130f" stroke-width="2"/>`;
+    }
+  }
+  const quantumPts = ns.map((N, i) => `${px(N)},${py(quantum[i])}`).join(" ");
+  html += `<polyline points="${quantumPts}" fill="none" stroke="#7bd3c8" stroke-width="2.2"/>`;
+  for (let i = 0; i < ns.length; i++) {
+    if (xTicks.includes(ns[i])) {
+      html += `<circle cx="${px(ns[i])}" cy="${py(quantum[i])}" r="4.5" fill="#7bd3c8" stroke="#17130f" stroke-width="2"/>`;
+    }
+  }
+
+  html += `<text x="${px(maxN) - 8}" y="${py(classical[classical.length - 1]) - 14}" text-anchor="end" fill="#e89a5a" font-family="Instrument Serif" font-style="italic" font-size="16">classical · N/2 queries</text>`;
+  html += `<text x="${px(maxN) - 8}" y="${py(quantum[quantum.length - 1]) - 14}" text-anchor="end" fill="#7bd3c8" font-family="Instrument Serif" font-style="italic" font-size="16">quantum · √N queries</text>`;
+  html += `<text x="${W / 2}" y="${H - 12}" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="10" letter-spacing="2">HAYSTACK SIZE (log)</text>`;
+  html += `<text transform="translate(16,${H/2}) rotate(-90)" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="10" letter-spacing="2">QUERIES (log)</text>`;
+
+  svg.innerHTML = html;
+})();
+
+/* =========================================================
+   SUPERPOSITION DEMO
+   ========================================================= */
+(function superDemo() {
+  const SUP_N = 3;
+  const size = 1 << SUP_N;
+  let state = new Float64Array(size); state[0] = 1;
+  const container = document.getElementById("super-bars");
+  const maxH = 180;
+
+  function render() {
+    container.innerHTML = "";
+    for (let i = 0; i < size; i++) {
+      const h = Math.abs(state[i]) * maxH;
+      const bar = document.createElement("div");
+      bar.className = "super-bar";
+      bar.innerHTML = `<div class="fill" style="height:${h}px"></div><div class="lbl">|${pad(i, SUP_N)}⟩</div>`;
+      container.appendChild(bar);
+    }
+  }
+  render();
+
+  document.getElementById("super-hadamard").addEventListener("click", () => {
+    // Apply H on all SUP_N qubits
+    for (let q = 0; q < SUP_N; q++) {
+      for (let i = 0; i < size; i++) {
+        const mask = 1 << q;
+        if ((i & mask) === 0) {
+          const j = i | mask;
+          const a = state[i], b = state[j];
+          state[i] = (a + b) * INV_SQRT2;
+          state[j] = (a - b) * INV_SQRT2;
+        }
+      }
+    }
+    render();
+    document.getElementById("super-text").innerHTML =
+      `Now every amplitude is 1/√${size} ≈ ${(1/Math.sqrt(size)).toFixed(3)}. The register holds all ${size} inputs <em>at once</em>, each with equal weight.`;
+  });
+  document.getElementById("super-reset").addEventListener("click", () => {
+    state = new Float64Array(size); state[0] = 1;
+    render();
+    document.getElementById("super-text").innerHTML =
+      'The register starts in the state <span class="mono">|000⟩</span>. One amplitude is 1, the rest are 0.';
+  });
+})();
+
+/* =========================================================
+   ALGORITHM PLAYER (n = 3)
+   ========================================================= */
+const PLAYER_N = 3;
+let currentMarked = "101";
+let playerScenes = null;
+let playerStep = 0;
+let playerTimer = null;
+
+function currentValues() {
+  return playerScenes.scenes[playerStep].values;
+}
+
+function renderAmplitudeBars(container, values, n, markedIdx) {
+  container.innerHTML = "";
+  const size = values.length;
+  for (let x = 0; x < size; x++) {
+    const v = values[x];
+    const bar = document.createElement("div");
+    bar.className = "amp-bar" + (x === markedIdx ? " marked" : "");
+    bar.innerHTML = `<span class="val">${v.toFixed(3)}</span><div class="fill"></div><span class="lbl">|${pad(x, n)}⟩${x === markedIdx ? ' ★' : ''}</span>`;
+    container.appendChild(bar);
+  }
+  updateAmplitudeBars(container, values);
+}
+
+function updateAmplitudeBars(container, values) {
+  const bars = container.querySelectorAll(".amp-bar");
+  const fullH = container.clientHeight;
+  const halfH = fullH / 2;
+  bars.forEach((bar, x) => {
+    const v = values[x];
+    const fill = bar.querySelector(".fill");
+    const val  = bar.querySelector(".val");
+    val.textContent = v.toFixed(3);
+    const mag = Math.abs(v);
+    const h = mag * halfH * 0.92;
+    if (v >= 0) {
+      fill.style.top = (halfH - h) + "px";
+      fill.style.height = h + "px";
+      fill.classList.remove("negative");
+    } else {
+      fill.style.top = halfH + "px";
+      fill.style.height = h + "px";
+      fill.classList.add("negative");
+    }
+  });
+}
+
+/* Geometric view: the Grover state lives in the plane spanned by
+   |unmarked⟩ (sum of all non-marked basis states, normalized) horizontal axis
+   and |marked⟩ vertical axis. The state vector's angle to the horizontal
+   is θ, with sin(θ) = amplitude on marked.
+   After k Grover iterations starting from θ₀ = arcsin(1/√N),
+   θ_k = (2k+1) · θ₀. */
+function renderGeometry(values, markedIdx, N) {
+  const svg = document.getElementById("geom-svg");
+  const W = 320, H = 320;
+  const cx = W / 2, cy = H / 2 + 40;   // center biased downward so vectors point up
+  const R = 110;
+
+  const aMarked = values[markedIdx];
+  // Unmarked component magnitude (any unmarked basis state; they're all equal).
+  // Actually compute total unmarked amplitude-vector length:
+  //   |unmarked component| = sqrt(sum_{x != marked} amps[x]^2)
+  let sumSq = 0;
+  for (let i = 0; i < values.length; i++) {
+    if (i !== markedIdx) sumSq += values[i] * values[i];
+  }
+  const aUnmarked = Math.sqrt(sumSq);
+  const theta = Math.atan2(aMarked, aUnmarked);
+  const thetaDeg = theta * 180 / Math.PI;
+
+  // Coordinates of the state vector tip
+  const tipX = cx + R * Math.cos(theta) * Math.sign(aUnmarked || 1);
+  const tipY = cy - R * Math.sin(theta);
+
+  let html = "";
+
+  // Grid background circle (quarter annotation)
+  html += `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="#2a231c" stroke-width="1" stroke-dasharray="3,3"/>`;
+
+  // Horizontal axis (unmarked)
+  html += `<line x1="${cx - R - 10}" y1="${cy}" x2="${cx + R + 10}" y2="${cy}" stroke="#3a3128" stroke-width="1"/>`;
+  html += `<text x="${cx + R + 16}" y="${cy + 4}" fill="#c5b9a0" font-family="Instrument Serif" font-style="italic" font-size="13">|unmarked⟩</text>`;
+
+  // Vertical axis (marked)
+  html += `<line x1="${cx}" y1="${cy + 10}" x2="${cx}" y2="${cy - R - 10}" stroke="#3a3128" stroke-width="1"/>`;
+  html += `<text x="${cx}" y="${cy - R - 18}" text-anchor="middle" fill="#f5d547" font-family="Instrument Serif" font-style="italic" font-size="13">|marked⟩</text>`;
+
+  // Reference angle θ₀ (initial, for reference) — light dashed line
+  const theta0 = Math.asin(1 / Math.sqrt(N));
+  const refX = cx + R * Math.cos(theta0);
+  const refY = cy - R * Math.sin(theta0);
+  html += `<line x1="${cx}" y1="${cy}" x2="${refX}" y2="${refY}" stroke="#3d7a75" stroke-width="1" stroke-dasharray="3,3" opacity="0.6"/>`;
+
+  // Angle arc
+  if (Math.abs(theta) > 0.01) {
+    const arcR = 36;
+    const endX = cx + arcR * Math.cos(theta);
+    const endY = cy - arcR * Math.sin(theta);
+    const largeArc = theta > Math.PI / 2 ? 1 : 0;
+    const sweepFlag = 0;
+    html += `<path d="M ${cx + arcR} ${cy} A ${arcR} ${arcR} 0 ${largeArc} ${sweepFlag} ${endX} ${endY}" fill="none" stroke="#f5d547" stroke-width="1.5"/>`;
+    html += `<text x="${cx + arcR + 8}" y="${cy - arcR * 0.35}" fill="#f5d547" font-family="Instrument Serif" font-style="italic" font-size="14">θ</text>`;
+  }
+
+  // The state vector
+  html += `<line x1="${cx}" y1="${cy}" x2="${tipX}" y2="${tipY}" stroke="#f5d547" stroke-width="2.5" stroke-linecap="round"/>`;
+  html += `<circle cx="${tipX}" cy="${tipY}" r="6" fill="#f5d547"/>`;
+  html += `<text x="${tipX + 14}" y="${tipY - 4}" fill="#f5d547" font-family="Instrument Serif" font-style="italic" font-size="14">|ψ⟩</text>`;
+
+  svg.innerHTML = html;
+
+  // Update probability + angle readouts
+  const pMarked = aMarked * aMarked;
+  document.getElementById("p-marked").textContent = pMarked.toFixed(3);
+  document.getElementById("p-angle").textContent = thetaDeg.toFixed(1) + "°";
+}
+
+/* Circuit SVG drawing.
+   For n input qubits and kOpt iterations, columns are:
+     col 0:                   H (initial superposition)
+     col 1, 3, 5, ...:        Oracle (one per iteration)
+     col 2, 4, 6, ...:        Diffusion = H · Z₀ · H (rendered as a single block)
+     last col:                Measurement
+   The current scene is highlighted via:
+     scene.phase = "init"      -> nothing highlighted
+     scene.phase = "uniform"   -> initial H column
+     scene.phase = "oracle"    -> oracle block of scene.iteration
+     scene.phase = "diffusion" -> diffusion block of scene.iteration
+     scene.phase = "measure"   -> measurement column */
+function renderCircuit(n, marked, scene, kOpt) {
+  const svg = document.getElementById("circuit-svg");
+  const W = 720;
+  const H = 50 + n * 40 + 20;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+
+  // Compute column x positions dynamically based on number of iterations
+  const totalCols = 1 + 2 * kOpt + 1;  // initial H + (oracle + diffusion) per iteration + measure
+  const startX = 110;
+  const endX = W - 30;
+  const usableW = endX - startX;
+  const colW = usableW / (totalCols - 1);
+  const colX = (idx) => startX + idx * colW;
+  const wireY = (q) => 50 + q * 40;
+
+  let html = "";
+  // Wires + labels
+  for (let q = 0; q < n; q++) {
+    html += `<text x="30" y="${wireY(q) + 4}" fill="#c5b9a0" font-family="JetBrains Mono" font-size="12">q${q}</text>`;
+    html += `<text x="70" y="${wireY(q) + 4}" fill="#8a806d" font-family="JetBrains Mono" font-size="12">|0⟩</text>`;
+    html += `<line x1="95" y1="${wireY(q)}" x2="${W - 20}" y2="${wireY(q)}" stroke="#3a3128" stroke-width="1"/>`;
+  }
+
+  function gateBox(cx, cy, label, highlighted) {
+    const w = 30, h = 26;
+    const stroke = highlighted ? "#f5d547" : "#c5b9a0";
+    const bg     = highlighted ? "#f5d547" : "#17130f";
+    const textC  = highlighted ? "#1a1509" : "#f1e6ce";
+    return `<rect x="${cx - w/2}" y="${cy - h/2}" width="${w}" height="${h}" rx="3" fill="${bg}" stroke="${stroke}" stroke-width="1.5"/>
+            <text x="${cx}" y="${cy + 5}" text-anchor="middle" fill="${textC}" font-family="Instrument Serif" font-style="italic" font-size="16">${label}</text>`;
+  }
+
+  function multiBox(cx, label, sublabel, highlighted, accentColor) {
+    // A box that spans all n wires.
+    const top = wireY(0) - 18, bot = wireY(n - 1) + 18;
+    const w = Math.max(58, colW * 0.82);
+    const left = cx - w / 2, right = cx + w / 2;
+    const stroke = highlighted ? "#f5d547" : (accentColor || "#7bd3c8");
+    const bg     = highlighted ? "rgba(245,213,71,0.15)" : (accentColor === "#e89a5a" ? "rgba(232,154,90,0.08)" : "rgba(123,211,200,0.08)");
+    const dash   = highlighted ? "" : "4,4";
+    let s = `<rect x="${left}" y="${top}" width="${w}" height="${bot - top}" rx="6" fill="${bg}" stroke="${stroke}" stroke-width="1.5" stroke-dasharray="${dash}"/>`;
+    const labelColor = highlighted ? "#f5d547" : (accentColor || "#7bd3c8");
+    s += `<text x="${cx}" y="${(top + bot) / 2 - 2}" text-anchor="middle" fill="${labelColor}" font-family="Instrument Serif" font-style="italic" font-size="17">${label}</text>`;
+    if (sublabel) {
+      s += `<text x="${cx}" y="${(top + bot) / 2 + 14}" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="9">${sublabel}</text>`;
+    }
+    return s;
+  }
+
+  // Column 0: initial Hadamards on every qubit
+  const hHl = scene.phase === "uniform";
+  for (let q = 0; q < n; q++) {
+    html += gateBox(colX(0), wireY(q), "H", hHl);
+  }
+
+  // Iterations: each one has an oracle column then a diffusion column
+  for (let k = 1; k <= kOpt; k++) {
+    const oracleCol = 1 + 2 * (k - 1);
+    const diffusionCol = oracleCol + 1;
+    const oracleHl = scene.phase === "oracle" && scene.iteration === k;
+    const diffHl   = scene.phase === "diffusion" && scene.iteration === k;
+    html += multiBox(colX(oracleCol), `O`, `iter ${k}`, oracleHl, "#e89a5a");
+    html += multiBox(colX(diffusionCol), `D`, `iter ${k}`, diffHl, "#7bd3c8");
+  }
+
+  // Final column: measurement
+  const measureCol = 1 + 2 * kOpt;
+  const mHl = scene.phase === "measure";
+  for (let q = 0; q < n; q++) {
+    const cx = colX(measureCol), cy = wireY(q);
+    const stroke = mHl ? "#f5d547" : "#c5b9a0";
+    const bg     = mHl ? "#f5d547" : "#17130f";
+    const textC  = mHl ? "#1a1509" : "#f1e6ce";
+    html += `<rect x="${cx - 15}" y="${cy - 13}" width="30" height="26" rx="3" fill="${bg}" stroke="${stroke}" stroke-width="1.5"/>
+             <path d="M${cx - 8},${cy + 5} A 8 8 0 0 1 ${cx + 8},${cy + 5}" fill="none" stroke="${textC}" stroke-width="1.5"/>
+             <line x1="${cx}" y1="${cy + 5}" x2="${cx + 6}" y2="${cy - 4}" stroke="${textC}" stroke-width="1.5"/>`;
+  }
+
+  // Tiny legend below the wires showing the meaning of O and D
+  const legY = wireY(n - 1) + 50;
+  html += `<text x="${startX}" y="${legY}" fill="#8a806d" font-family="JetBrains Mono" font-size="9.5"><tspan fill="#e89a5a">O</tspan>  oracle — flip sign of marked  ·  <tspan fill="#7bd3c8">D</tspan>  diffusion = H · Z₀ · H  (inversion about mean)</text>`;
+
+  svg.innerHTML = html;
+}
+
+
+function renderPlayerStep() {
+  const scene = playerScenes.scenes[playerStep];
+  document.getElementById("step-count").textContent = `Step ${playerStep} / ${playerScenes.scenes.length - 1}`;
+  document.getElementById("step-name").textContent = scene.label;
+  document.getElementById("commentary").innerHTML = scene.commentary;
+
+  const dots = document.getElementById("step-dots");
+  dots.innerHTML = "";
+  for (let i = 0; i < playerScenes.scenes.length; i++) {
+    const d = document.createElement("div");
+    d.className = "dot " + (i < playerStep ? "done" : i === playerStep ? "active" : "");
+    dots.appendChild(d);
+  }
+
+  const values = currentValues();
+  const container = document.getElementById("amp-bars");
+  if (container.children.length !== values.length || container.dataset.marked !== String(scene.marked)) {
+    renderAmplitudeBars(container, values, PLAYER_N, scene.marked);
+    container.dataset.marked = String(scene.marked);
+    requestAnimationFrame(() => updateAmplitudeBars(container, values));
+  } else {
+    updateAmplitudeBars(container, values);
+  }
+
+  renderCircuit(PLAYER_N, scene.marked, scene, playerScenes.kOpt);
+  renderGeometry(values, scene.marked, playerScenes.N);
+
+  document.getElementById("player-prev").disabled = playerStep === 0;
+  document.getElementById("player-next").disabled = playerStep === playerScenes.scenes.length - 1;
+}
+
+function rebuildPlayer() {
+  playerScenes = buildScenes(PLAYER_N, currentMarked);
+  playerStep = 0;
+  renderPlayerStep();
+}
+
+document.querySelectorAll("#seg-oracle button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#seg-oracle button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentMarked = btn.dataset.s;
+    rebuildPlayer();
+  });
+});
+
+document.getElementById("player-next").addEventListener("click", () => {
+  if (playerStep < playerScenes.scenes.length - 1) { playerStep++; renderPlayerStep(); }
+});
+document.getElementById("player-prev").addEventListener("click", () => {
+  if (playerStep > 0) { playerStep--; renderPlayerStep(); }
+});
+document.getElementById("player-reset").addEventListener("click", () => {
+  stopPlayer();
+  playerStep = 0;
+  renderPlayerStep();
+});
+document.getElementById("player-play").addEventListener("click", () => {
+  if (playerTimer) { stopPlayer(); return; }
+  if (playerStep === playerScenes.scenes.length - 1) playerStep = 0;
+  document.getElementById("player-play").textContent = "⏸ Pause";
+  playerTimer = setInterval(() => {
+    if (playerStep < playerScenes.scenes.length - 1) {
+      playerStep++;
+      renderPlayerStep();
+    } else {
+      stopPlayer();
+    }
+  }, 1400);
+});
+function stopPlayer() {
+  if (playerTimer) { clearInterval(playerTimer); playerTimer = null; }
+  document.getElementById("player-play").textContent = "▶ Play";
+}
+
+rebuildPlayer();
+
+/* =========================================================
+   SANDBOX — iterate Grover's algorithm k times, inspect result
+   ========================================================= */
+let sbN = 3;
+let sbMarked = "101";
+let sbK = 2;
+
+const sbNSlider = document.getElementById("sb-n");
+const sbKSlider = document.getElementById("sb-k");
+const sbNVal    = document.getElementById("sb-n-val");
+const sbKVal    = document.getElementById("sb-k-val");
+const sbKOptEl  = document.getElementById("sb-k-optimal");
+const sbSInput  = document.getElementById("sb-s");
+
+function reshapeMarked() {
+  if (sbMarked.length < sbN) sbMarked = sbMarked + "0".repeat(sbN - sbMarked.length);
+  else if (sbMarked.length > sbN) sbMarked = sbMarked.slice(-sbN);
+  sbSInput.value = sbMarked;
+}
+
+function updateKOptLabel() {
+  const N = 1 << sbN;
+  const kOpt = groverOptimalK(N);
+  sbKOptEl.textContent = `optimal ≈ ${kOpt}`;
+}
+
+function syncSandboxUI() {
+  sbNVal.textContent = sbN;
+  sbKVal.textContent = sbK;
+  reshapeMarked();
+  updateKOptLabel();
+  runSandbox();
+}
+
+function runGroverSandbox(n, marked, k) {
+  const N = 1 << n;
+  const markedIdx = parseInt(marked, 2);
+  const amps = new Float64Array(N);
+  const uniform = 1 / Math.sqrt(N);
+  for (let i = 0; i < N; i++) amps[i] = uniform;
+  for (let it = 0; it < k; it++) {
+    applyGroverOracle(amps, markedIdx);
+    applyDiffusion(amps);
+  }
+  return { amps, markedIdx };
+}
+
+function runSandbox() {
+  const { amps, markedIdx } = runGroverSandbox(sbN, sbMarked, sbK);
+  const pMarked = amps[markedIdx] * amps[markedIdx];
+
+  const container = document.getElementById("sb-amp-bars");
+  renderAmplitudeBars(container, Array.from(amps), sbN, markedIdx);
+  container.dataset.marked = String(markedIdx);
+  if (amps.length >= 16) container.classList.add("dense");
+  else container.classList.remove("dense");
+  requestAnimationFrame(() => updateAmplitudeBars(container, Array.from(amps)));
+
+  const verd = document.getElementById("sb-verdict");
+  verd.textContent = `P(|${sbMarked}⟩) = ${(pMarked * 100).toFixed(1)}%`;
+  verd.className = "final-answer";
+  if (pMarked > 0.95) verd.classList.add("solved");
+
+  const N = 1 << sbN;
+  const kOpt = groverOptimalK(N);
+  const comment = document.getElementById("sb-comment");
+  if (sbK === 0) {
+    comment.innerHTML = `Zero iterations: the state is a uniform superposition. Every item has probability <span class="mono">1/${N} = ${(1/N*100).toFixed(1)}%</span>. No rotation has happened yet.`;
+  } else if (sbK === kOpt) {
+    comment.innerHTML = `At the optimum <span class="mono">k* = ${kOpt}</span>: the marked amplitude is as tall as it gets, with probability <span class="mono">${(pMarked * 100).toFixed(1)}%</span>. One more iteration would start to decrease it.`;
+  } else if (sbK < kOpt) {
+    comment.innerHTML = `Not yet at the sweet spot (<span class="mono">k* = ${kOpt}</span>). Increase <span class="mono">k</span> and watch the marked amplitude grow.`;
+  } else if (sbK === kOpt + 1) {
+    comment.innerHTML = `One past optimum (<span class="mono">k* = ${kOpt}</span>). The probability is starting to drop from its peak.`;
+  } else if (pMarked < 0.5) {
+    comment.innerHTML = `${sbK - kOpt} iterations past the optimum (<span class="mono">k* = ${kOpt}</span>). The state has rotated well past the marked axis and the probability has collapsed. Grover's algorithm is <em>not</em> "more is better" — there's a sweet spot.`;
+  } else {
+    comment.innerHTML = `${sbK - kOpt} iterations past the optimum (<span class="mono">k* = ${kOpt}</span>). Probability is decreasing as the state rotates past the marked axis. The curve will oscillate as you keep iterating.`;
+  }
+
+  document.getElementById("sb-result").style.display = "block";
+}
+
+sbNSlider.addEventListener("input", e => {
+  sbN = parseInt(e.target.value);
+  syncSandboxUI();
+});
+sbKSlider.addEventListener("input", e => {
+  sbK = parseInt(e.target.value);
+  sbKVal.textContent = sbK;
+  runSandbox();
+});
+sbSInput.addEventListener("input", e => {
+  const v = e.target.value.replace(/[^01]/g, "").slice(0, sbN);
+  sbMarked = v;
+  e.target.value = v;
+  if (v.length === sbN) runSandbox();
+});
+document.getElementById("sb-random").addEventListener("click", () => {
+  const N = 1 << sbN;
+  const m = Math.floor(Math.random() * N);
+  sbMarked = pad(m, sbN);
+  sbSInput.value = sbMarked;
+  runSandbox();
+});
+document.getElementById("sb-run").addEventListener("click", runSandbox);
+
+syncSandboxUI();
+/* =========================================================
+   PROGRESS RAIL + REVEAL ON SCROLL
+   ========================================================= */
+(function observers() {
+  const sections = document.querySelectorAll("section[id]");
+  const railLinks = document.querySelectorAll(".rail a");
+  const sectionToLink = {};
+  railLinks.forEach(a => sectionToLink[a.getAttribute("href").slice(1)] = a);
+
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        railLinks.forEach(a => a.classList.remove("active"));
+        const link = sectionToLink[e.target.id];
+        if (link) link.classList.add("active");
+      }
+    });
+  }, { rootMargin: "-45% 0px -45% 0px" });
+  sections.forEach(s => io.observe(s));
+
+  // Reveal observer
+  const reveals = document.querySelectorAll(".reveal, h2, .lead, .promise-card, .game-board, .curse-chart, .super-demo, .player, .sandbox, .stat-row");
+  reveals.forEach(r => r.classList.add("reveal"));
+  const ro = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add("seen");
+        ro.unobserve(e.target);
+      }
+    });
+  }, { rootMargin: "0px 0px -10% 0px" });
+  reveals.forEach(r => ro.observe(r));
+})();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,2740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Quantum Fourier Transform — A Hands-On Introduction</title>
+<meta name="description" content="The engine behind QPE and Shor — Fourier analysis on quantum amplitudes." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:ital,opsz,wght@0,6..72,200..800;1,6..72,200..800&display=swap" rel="stylesheet">
+<style>
+/* =========================================================
+   1. DESIGN TOKENS
+   ========================================================= */
+:root {
+  --bg:         #17130f;
+  --bg-soft:    #1f1a15;
+  --bg-lift:    #2a231c;
+  --ink:        #f1e6ce;
+  --ink-soft:   #c5b9a0;
+  --ink-dim:    #8a806d;
+  --line:       #3a3128;
+  --line-soft:  #2a231c;
+
+  --quantum:       #7bd3c8;
+  --quantum-dim:   #3d7a75;
+  --classical:     #e89a5a;
+  --classical-dim: #7a4f2a;
+  --spark:         #f5d547;
+  --alert:         #e0624b;
+
+  --font-display: "Instrument Serif", "Fraunces", Georgia, serif;
+  --font-body:    "Newsreader", "EB Garamond", Georgia, serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+
+  --measure:      68ch;
+  --radius-s:     4px;
+  --radius-m:     10px;
+  --radius-l:     20px;
+  --shadow-soft:  0 14px 40px -12px rgba(0,0,0,0.6);
+  --ease:         cubic-bezier(0.33, 1, 0.68, 1);
+  --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* =========================================================
+   2. RESET + BASE
+   ========================================================= */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 18px;
+  line-height: 1.65;
+  font-feature-settings: "liga", "kern";
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Warm subtle grain everywhere */
+body::before {
+  content: "";
+  position: fixed; inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  z-index: 1000;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+::selection { background: var(--spark); color: #000; }
+
+/* =========================================================
+   3. TYPOGRAPHY
+   ========================================================= */
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+}
+.display {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: clamp(3.2rem, 9vw, 7rem);
+  line-height: 0.98;
+  letter-spacing: -0.03em;
+}
+h2 {
+  font-size: clamp(2rem, 4.6vw, 3.4rem);
+  font-style: italic;
+  margin-bottom: 0.35em;
+}
+h2::before {
+  content: attr(data-act);
+  display: block;
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-size: 0.68rem;
+  letter-spacing: 0.3em;
+  color: var(--ink-dim);
+  margin-bottom: 1.4rem;
+  text-transform: uppercase;
+}
+h3 {
+  font-size: 1.6rem;
+  margin-bottom: 0.6em;
+}
+p {
+  margin-bottom: 1.1em;
+  max-width: var(--measure);
+}
+.lead {
+  font-size: clamp(1.15rem, 1.7vw, 1.35rem);
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+}
+em { font-style: italic; color: var(--spark); }
+strong { font-weight: 600; color: var(--ink); }
+code, .mono {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: var(--bg-soft);
+  padding: 0.08em 0.35em;
+  border-radius: var(--radius-s);
+  color: var(--quantum);
+  border: 1px solid var(--line-soft);
+}
+
+/* =========================================================
+   4. LAYOUT
+   ========================================================= */
+section {
+  padding: 9rem 1.5rem;
+  position: relative;
+}
+.container {
+  max-width: 1080px;
+  margin: 0 auto;
+}
+.narrow { max-width: 640px; margin: 0 auto; }
+
+.section-rule {
+  width: 80px; height: 1px;
+  background: var(--line);
+  margin: 0 0 2.5rem 0;
+}
+
+/* Progress rail on the side */
+.rail {
+  position: fixed; top: 50%; left: 1.2rem;
+  transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 0.8rem;
+  z-index: 100;
+  mix-blend-mode: difference;
+}
+.rail a {
+  display: block; width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(241,230,206,0.28);
+  transition: all 0.3s var(--ease);
+  position: relative;
+}
+.rail a.active { background: var(--spark); transform: scale(1.35); }
+.rail a:hover::after {
+  content: attr(data-label);
+  position: absolute; left: 20px; top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-mono); font-size: 0.7rem;
+  color: var(--ink); white-space: nowrap;
+  background: var(--bg-soft); padding: 4px 10px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--line);
+}
+@media (max-width: 820px) { .rail { display: none; } }
+
+/* =========================================================
+   5. HERO
+   ========================================================= */
+#hero {
+  min-height: 100vh;
+  display: flex; flex-direction: column; justify-content: center;
+  padding-top: 6rem; padding-bottom: 6rem;
+  position: relative;
+  overflow: hidden;
+}
+.hero-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.35em;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  margin-bottom: 2rem;
+}
+.hero-eyebrow .dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--quantum);
+  margin-right: 0.8rem;
+  vertical-align: middle;
+  animation: pulse 2.4s var(--ease) infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50%      { opacity: 1;   transform: scale(1.4); }
+}
+#hero .display span { color: var(--ink); }
+#hero .display .dash { color: var(--spark); font-style: normal; margin: 0 -0.15em; }
+.hero-sub {
+  margin-top: 1.8rem;
+  font-size: clamp(1.1rem, 1.6vw, 1.35rem);
+  max-width: 46ch;
+  color: var(--ink-soft);
+}
+.hero-meta {
+  margin-top: 3rem;
+  display: flex; gap: 2.2rem; flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.hero-meta b {
+  display: block;
+  color: var(--ink);
+  font-weight: 500;
+  font-size: 0.85rem;
+  margin-top: 0.2rem;
+}
+/* Animated bars behind hero title */
+.hero-bg {
+  position: absolute; inset: 0;
+  z-index: 0; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0.18;
+}
+.hero-bg svg { width: 90%; max-width: 900px; height: 260px; }
+#hero > * { position: relative; z-index: 1; }
+
+.scroll-cue {
+  margin-top: 5rem;
+  display: inline-flex; align-items: center; gap: 0.9rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.scroll-cue::before {
+  content: ""; width: 36px; height: 1px;
+  background: var(--ink-dim);
+  animation: cue 2s var(--ease) infinite;
+}
+@keyframes cue {
+  0%, 100% { transform: scaleX(1); opacity: 0.5; }
+  50%      { transform: scaleX(1.4); opacity: 1; }
+}
+
+/* =========================================================
+   6. PROMISE SECTION
+   ========================================================= */
+.promise-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-top: 3rem;
+}
+@media (max-width: 720px) { .promise-grid { grid-template-columns: 1fr; } }
+.promise-card {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 1.6rem 1.6rem 1.8rem;
+  position: relative;
+  overflow: hidden;
+}
+.promise-card .label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 1rem;
+}
+.promise-card h3 {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.8rem;
+  margin-bottom: 1.2rem;
+}
+.promise-card.constant h3  { color: var(--classical); }
+.promise-card.balanced h3  { color: var(--quantum); }
+
+.truth-table {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+.truth-table > div {
+  padding: 0.4em 0.9em;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex; align-items: center;
+}
+.truth-table > div:nth-last-child(-n+2) { border-bottom: none; }
+.truth-table .hx { background: var(--bg-lift); color: var(--ink-dim); }
+.truth-table .hy { background: var(--bg-lift); color: var(--ink-dim); font-weight: 500; }
+.truth-table .val { font-weight: 700; }
+.truth-table .val.zero { color: var(--ink-soft); }
+.truth-table .val.one  { color: var(--spark); }
+.truth-table .hx.marked-row { color: var(--spark); font-weight: 700; }
+
+/* DFT mini visualization for promise cards */
+.dft-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.4rem 0;
+  border-top: 1px solid var(--line-soft);
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+.dft-mini-row {
+  display: flex; align-items: center; gap: 0.7rem;
+}
+.dft-mini-row .lbl {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.15em;
+  color: var(--ink-dim);
+  min-width: 60px;
+  text-transform: uppercase;
+}
+.dft-mini-bars {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 36px;
+}
+.dft-mini-bar {
+  flex: 1;
+  background: var(--quantum);
+  border-radius: 1px;
+  min-height: 1px;
+  transition: height 0.4s var(--ease-out);
+}
+.dft-mini-bar.cls { background: var(--classical); }
+.truth-table .hx.pair { font-size: 0.86rem; }
+.truth-table .hx.pair .pair-sep { color: var(--ink-dim); margin: 0 0.3em; }
+
+.promise-card button {
+  margin-top: 1.2rem;
+  width: 100%;
+}
+
+/* =========================================================
+   7. CLASSICAL GAME
+   ========================================================= */
+.game-board {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 2rem;
+  margin-top: 2rem;
+}
+.game-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+.game-title {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.3rem;
+  color: var(--classical);
+}
+.query-counter {
+  display: flex; gap: 1.2rem; align-items: baseline;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.query-counter .n {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 2.4rem;
+  color: var(--spark);
+  line-height: 1;
+  font-feature-settings: "tnum";
+  letter-spacing: -0.02em;
+}
+.query-counter .slash {
+  color: var(--ink-dim);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.6rem;
+  margin: 0 -0.2em;
+}
+.query-counter .max {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.4rem;
+  color: var(--ink-soft);
+}
+
+.query-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.7rem;
+  margin-bottom: 1.8rem;
+}
+@media (max-width: 520px) { .query-grid { grid-template-columns: repeat(2, 1fr); } }
+.q-cell {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 1rem 0.6rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.25s var(--ease);
+  position: relative;
+  user-select: none;
+}
+.q-cell:hover:not(.queried):not(.locked) {
+  border-color: var(--classical);
+  background: var(--bg-lift);
+  transform: translateY(-1px);
+}
+.q-cell .x {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  display: block;
+  margin-bottom: 0.3rem;
+}
+.q-cell .result {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.8rem;
+  color: var(--ink-dim);
+  line-height: 1;
+  display: block;
+  min-height: 1.8rem;
+}
+.q-cell.queried .result.zero { color: var(--ink); }
+.q-cell.queried .result.one  { color: var(--spark); }
+.q-cell.queried  { background: var(--bg-lift); border-color: var(--classical-dim); }
+.q-cell.locked   { cursor: not-allowed; opacity: 0.6; }
+.q-cell .flash {
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  background: var(--spark);
+  opacity: 0;
+  pointer-events: none;
+}
+.q-cell.flash-on .flash { animation: flash 0.45s var(--ease-out); }
+@keyframes flash {
+  0%   { opacity: 0.5; }
+  100% { opacity: 0; }
+}
+
+.belief-bar {
+  height: 8px; width: 100%;
+  background: var(--bg-lift);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+  position: relative;
+}
+.belief-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--classical-dim), var(--classical), var(--spark));
+  transition: width 0.6s var(--ease-out);
+  width: 0%;
+}
+.belief-label {
+  display: flex; justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 0.5rem;
+}
+.belief-label b {
+  color: var(--ink-soft);
+  font-feature-settings: "tnum";
+}
+
+.commit-row {
+  display: flex; gap: 0.8rem; flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+.commit-row button { flex: 1; min-width: 160px; }
+
+.verdict {
+  margin-top: 1.5rem;
+  padding: 1.2rem 1.4rem;
+  border-radius: var(--radius-m);
+  border-left: 3px solid;
+  background: var(--bg);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: 1.5;
+  display: none;
+}
+.verdict.show { display: block; animation: fadeIn 0.4s var(--ease-out); }
+.verdict.win   { border-color: var(--quantum); }
+.verdict.lucky { border-color: var(--spark); }
+.verdict.wrong { border-color: var(--alert); }
+.verdict.info  { border-color: var(--classical); }
+.verdict b { color: var(--spark); }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* BV-specific: secret-so-far display */
+.secret-reveal {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 0.8rem;
+  padding: 1.8rem 1rem;
+  margin-bottom: 1.5rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
+.secret-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.secret-bits {
+  display: flex;
+  gap: 0.6rem;
+}
+.secret-bits .bit {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 54px; height: 66px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--bg-soft);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 2.6rem;
+  line-height: 1;
+  color: var(--ink-dim);
+  transition: all 0.5s var(--ease-out);
+}
+.secret-bits .bit.revealed.zero {
+  color: var(--ink);
+  border-color: var(--classical-dim);
+  background: var(--bg-lift);
+}
+.secret-bits .bit.revealed.one {
+  color: var(--spark);
+  border-color: var(--spark);
+  background: rgba(245,213,71,0.08);
+}
+.secret-bits .bit.just-revealed {
+  animation: reveal 0.8s var(--ease-out);
+}
+@keyframes reveal {
+  0%   { transform: scale(1.15); box-shadow: 0 0 0 0 rgba(245,213,71,0.4); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 20px rgba(245,213,71,0); }
+}
+.candidates-info {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  color: var(--ink-dim);
+  margin-top: 0.4rem;
+}
+.candidates-info #candidates-count {
+  color: var(--spark);
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+/* Query sections */
+.queries-section { margin-bottom: 1.2rem; }
+.queries-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 0.8rem;
+}
+.basis-queries {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.6rem;
+}
+@media (max-width: 520px) { .basis-queries { grid-template-columns: repeat(2, 1fr); } }
+.basis-queries .btn {
+  padding: 0.75em 0.5em;
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  font-family: var(--font-mono);
+}
+.basis-queries .btn.used {
+  opacity: 0.45;
+  pointer-events: none;
+  border-style: dashed;
+}
+.custom-query-row {
+  display: flex; gap: 0.6rem;
+}
+.custom-query-row .sb-text { flex: 1; }
+
+.query-log {
+  margin-top: 1.2rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  max-height: 180px;
+  overflow-y: auto;
+}
+.query-log ul {
+  list-style: none;
+  padding: 0.4rem 1.2rem 1rem;
+  margin: 0;
+}
+.query-log li {
+  padding: 0.4rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--line-soft);
+  display: flex; gap: 1rem; align-items: baseline;
+}
+.query-log li:last-child { border-bottom: none; }
+.query-log li .idx {
+  color: var(--ink-dim);
+  min-width: 2ch;
+}
+.query-log li .x { color: var(--ink); }
+.query-log li .arrow { color: var(--ink-dim); }
+.query-log li .f { color: var(--spark); font-weight: 700; }
+.query-log li .elim { color: var(--ink-dim); margin-left: auto; font-size: 0.72rem; }
+
+/* QFT-specific: DFT explorer */
+.dft-presets {
+  display: flex; gap: 0.4rem; flex-wrap: wrap;
+  align-items: center;
+}
+.dft-presets .btn {
+  padding: 0.5em 0.9em;
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+}
+.dft-presets .btn.active {
+  background: var(--spark);
+  color: #1a1509;
+  border-color: var(--spark);
+  font-weight: 700;
+}
+
+.dft-explorer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin: 0.5rem 0 0;
+}
+@media (max-width: 720px) { .dft-explorer { grid-template-columns: 1fr; } }
+.dft-panel {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 1.2rem;
+}
+.dft-panel-label {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.2em;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  margin-bottom: 1rem;
+}
+.dft-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 180px;
+  position: relative;
+}
+.dft-bars::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0;
+  height: 1px; background: var(--line);
+}
+.dft-bar {
+  flex: 1;
+  background: var(--quantum);
+  border-radius: 2px 2px 0 0;
+  transition: height 0.4s var(--ease-out);
+  cursor: pointer;
+  position: relative;
+  min-height: 1px;
+}
+.dft-bar.cls { background: var(--classical); }
+.dft-bar:hover { opacity: 0.85; }
+.dft-input .dft-bar { cursor: ns-resize; }
+.dft-input .dft-bar.dragging { background: var(--spark); }
+.query-log li .meaning { color: var(--ink-soft); }
+.query-log li .meaning sub { font-size: 0.75em; }
+
+/* Rules / How it works aside */
+.rules-box {
+  max-width: var(--measure);
+  margin: 2.5rem 0 2rem;
+  padding: 1.6rem 1.8rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--quantum);
+  border-radius: var(--radius-m);
+}
+.rules-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--quantum);
+  margin-bottom: 0.9rem;
+}
+.rules-box p {
+  font-size: 1rem;
+  line-height: 1.55;
+  margin-bottom: 0.8rem;
+  max-width: none;
+}
+.example-list {
+  list-style: none;
+  padding: 0.6rem 0;
+  margin: 0 0 0.8rem;
+  font-size: 0.95rem;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+.example-list li {
+  padding: 0.35rem 0;
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+}
+.example-list li .mono { background: transparent; border: none; padding: 0; color: var(--ink); }
+.example-list li strong { color: var(--spark); font-weight: 700; }
+.ex-result {
+  font-family: var(--font-mono);
+  color: var(--spark);
+  font-weight: 700;
+  background: rgba(245,213,71,0.08);
+  padding: 0.08em 0.4em;
+  border-radius: 3px;
+}
+
+/* Basis-query button with two lines */
+.basis-queries .btn {
+  display: flex; flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.7em 0.5em;
+}
+.basis-queries .btn .reveals {
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  color: var(--quantum);
+  font-weight: 400;
+  text-transform: none;
+}
+.basis-queries .btn.used .reveals { color: var(--ink-dim); }
+
+/* =========================================================
+   8. BUTTONS
+   ========================================================= */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.6rem;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 500;
+  padding: 0.85em 1.4em;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+  text-decoration: none;
+  line-height: 1;
+}
+.btn:hover { border-color: var(--ink); background: var(--bg-lift); }
+.btn.primary {
+  background: var(--spark);
+  color: #1a1509;
+  border-color: var(--spark);
+  font-weight: 700;
+}
+.btn.primary:hover {
+  background: #fbe064;
+  border-color: #fbe064;
+  transform: translateY(-1px);
+}
+.btn.ghost { color: var(--ink-soft); }
+.btn.quantum { border-color: var(--quantum); color: var(--quantum); }
+.btn.quantum:hover { background: var(--quantum); color: #0b1816; }
+.btn.classical { border-color: var(--classical); color: var(--classical); }
+.btn.classical:hover { background: var(--classical); color: #1a0f05; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* =========================================================
+   9. CURSE CHART
+   ========================================================= */
+.curse-chart {
+  margin-top: 3rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 2rem;
+  overflow-x: auto;
+}
+.curse-chart svg { width: 100%; height: auto; min-width: 420px; }
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-top: 2rem;
+}
+@media (max-width: 620px) { .stat-row { grid-template-columns: 1fr; } }
+.stat {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 1.2rem 1.4rem;
+}
+.stat .k {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 0.3rem;
+}
+.stat .v {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 2rem;
+  color: var(--spark);
+  line-height: 1;
+}
+.stat .v small { color: var(--ink-soft); font-size: 0.6em; }
+
+/* =========================================================
+   10. QUANTUM INTRO — SUPERPOSITION
+   ========================================================= */
+.super-demo {
+  margin-top: 2.5rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 2rem;
+  text-align: center;
+}
+.super-demo .bar-row {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 14px;
+  height: 220px;
+  margin: 1.5rem 0;
+}
+.super-bar {
+  flex: 0 0 auto;
+  width: 46px;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  position: relative;
+}
+.super-bar .fill {
+  width: 100%;
+  background: var(--quantum);
+  transition: height 0.8s var(--ease-out), background 0.4s var(--ease);
+  border-radius: 2px 2px 0 0;
+}
+.super-bar .lbl {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--ink-dim);
+  margin-top: 0.6rem;
+}
+.super-demo .explanation {
+  color: var(--ink-soft);
+  font-style: italic;
+  font-size: 1.05rem;
+  min-height: 3.2em;
+  max-width: 54ch;
+  margin: 1rem auto 0;
+}
+
+/* Formula box */
+.formula-box {
+  margin: 2rem auto;
+  max-width: 64ch;
+  padding: 1.6rem 2rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  text-align: center;
+}
+.formula {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: clamp(1.4rem, 2.4vw, 1.9rem);
+  color: var(--quantum);
+  letter-spacing: 0.01em;
+}
+.formula sub, .formula sup {
+  font-size: 0.7em;
+  font-style: normal;
+}
+.formula-note {
+  margin-top: 1rem;
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+/* Phase demo: complex amplitudes shown as arrows on the unit circle */
+.phase-demo {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 3rem;
+  flex-wrap: wrap;
+  margin: 1.5rem 0;
+}
+.phase-amp {
+  display: flex; flex-direction: column; align-items: center; gap: 0.8rem;
+}
+.phase-amp svg { width: 110px; height: 110px; }
+.phase-amp .label {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.4rem;
+  color: var(--quantum);
+}
+.phase-amp .desc {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  color: var(--ink-dim);
+}
+
+/* =========================================================
+   11. ALGORITHM PLAYER
+   ========================================================= */
+.player {
+  margin-top: 2rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  overflow: hidden;
+}
+.player-header {
+  padding: 1.3rem 1.8rem;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.step-label {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.5rem;
+  color: var(--ink);
+}
+.step-label .count {
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  color: var(--ink-dim);
+  margin-right: 0.8rem;
+  text-transform: uppercase;
+}
+
+.player-body {
+  padding: 2rem 1.5rem;
+}
+
+/* Circuit diagram */
+.circuit-container {
+  overflow-x: auto;
+  padding: 0.5rem 0;
+  margin-bottom: 1.5rem;
+}
+.circuit-svg {
+  display: block;
+  margin: 0 auto;
+}
+
+/* Amplitude bars visualization */
+.amp-viz {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px dashed var(--line);
+}
+.amp-viz h4 {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 1.2rem;
+  font-weight: 400;
+}
+.amp-bar-row {
+  position: relative;
+  height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 0.5rem;
+}
+.amp-bar-row::before {
+  content: "";
+  position: absolute; left: 0; right: 0; top: 50%;
+  height: 1px;
+  background: var(--line);
+  z-index: 0;
+}
+.amp-bar {
+  flex: 0 1 52px;
+  min-width: 12px;
+  height: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+.amp-bar .fill {
+  position: absolute;
+  left: 4px; right: 4px;
+  top: 50%;
+  background: var(--quantum);
+  height: 0;
+  transition: top 0.7s var(--ease-out), height 0.7s var(--ease-out), background 0.4s var(--ease);
+  border-radius: 2px;
+}
+.amp-bar .fill.negative { background: var(--alert); }
+
+/* Probability mode: bars go from bottom up, using full height */
+.amp-bar-row.prob-mode::before { display: none; }
+.amp-bar-row.prob-mode .amp-bar .fill {
+  top: auto;
+  bottom: 0;
+  background: var(--quantum);
+}
+.amp-bar .lbl {
+  position: absolute;
+  bottom: -1.8rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+/* Hide labels when there are many bars; only show every few */
+.amp-bar-row.dense .amp-bar .lbl { display: none; }
+.amp-bar-row.dense .amp-bar.marked .lbl { display: block; font-size: 0.6rem; }
+.amp-bar .val {
+  position: absolute;
+  top: -1.3rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--ink-soft);
+  opacity: 0;
+  transition: opacity 0.3s var(--ease);
+  white-space: nowrap;
+}
+.amp-bar:hover .val { opacity: 1; }
+
+.amp-legend {
+  display: flex; gap: 1.8rem; justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-top: 2.8rem;
+}
+.amp-legend .chip {
+  display: inline-block; width: 10px; height: 10px;
+  border-radius: 2px;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+}
+.amp-legend .chip.pos { background: var(--quantum); }
+.amp-legend .chip.neg { background: var(--alert); }
+.amp-legend .chip.marked { background: var(--spark); }
+
+/* Phase legend chip — color wheel */
+.phase-chip {
+  display: inline-block;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+  background: conic-gradient(
+    from 0deg,
+    hsl(0, 70%, 60%),
+    hsl(60, 70%, 60%),
+    hsl(120, 70%, 55%),
+    hsl(180, 70%, 55%),
+    hsl(240, 70%, 65%),
+    hsl(300, 70%, 60%),
+    hsl(360, 70%, 60%)
+  );
+  border: 1px solid var(--ink-dim);
+}
+
+/* Complex amplitude bars: vertical bar (magnitude) + small phase indicator */
+.complex-bars {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 12px;
+  height: 220px;
+  padding-bottom: 2.4rem;
+  padding-top: 2rem;
+  position: relative;
+}
+.complex-bar {
+  flex: 0 1 56px;
+  min-width: 24px;
+  height: 100%;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+}
+.complex-bar .fill {
+  width: 100%;
+  background: var(--quantum);
+  border-radius: 2px 2px 0 0;
+  transition: height 0.6s var(--ease-out), background 0.4s var(--ease);
+  min-height: 0;
+}
+.complex-bar .lbl {
+  position: absolute;
+  bottom: -1.7rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+.complex-bar .phase-arrow {
+  position: absolute;
+  top: -2.2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px; height: 32px;
+}
+.complex-bars.dense .complex-bar .lbl { display: none; }
+.complex-bars.dense .complex-bar .phase-arrow {
+  width: 20px; height: 20px;
+  top: -1.6rem;
+}
+
+/* Grover: highlight the marked bar */
+.amp-bar.marked .fill {
+  outline: 2px solid var(--spark);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+.amp-bar.marked .lbl {
+  color: var(--spark);
+  font-weight: 700;
+}
+
+/* Grover two-column player body */
+.grover-viz-row {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 2rem;
+  align-items: start;
+  margin-top: 1rem;
+}
+@media (max-width: 820px) {
+  .grover-viz-row { grid-template-columns: 1fr; }
+}
+.grover-viz-row > div > h4 {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 1.2rem;
+  font-weight: 400;
+}
+
+.geom-viz {
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.geom-viz svg {
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+}
+.prob-readout {
+  display: flex;
+  gap: 1.8rem;
+  margin-top: 1rem;
+  justify-content: center;
+}
+.prob-readout > div {
+  display: flex; flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+}
+.prob-readout .k {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.prob-readout .v {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.8rem;
+  color: var(--spark);
+  line-height: 1;
+  font-feature-settings: "tnum";
+}
+
+/* Commentary box */
+.commentary {
+  margin-top: 2rem;
+  padding: 1.2rem 1.4rem;
+  border-left: 3px solid var(--quantum);
+  background: var(--bg);
+  border-radius: 0 var(--radius-s) var(--radius-s) 0;
+  font-style: italic;
+  color: var(--ink-soft);
+  min-height: 3.4em;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+/* Player controls */
+.player-controls {
+  display: flex;
+  gap: 0.7rem;
+  align-items: center;
+  justify-content: center;
+  padding: 1.2rem 1.5rem;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+  flex-wrap: wrap;
+}
+.player-controls .spacer { flex: 1; }
+.step-dots {
+  display: flex; gap: 6px;
+  align-items: center;
+}
+.step-dots .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--line);
+  transition: all 0.3s var(--ease);
+}
+.step-dots .dot.active { background: var(--spark); transform: scale(1.3); }
+.step-dots .dot.done   { background: var(--quantum); }
+
+/* Oracle picker */
+.oracle-picker {
+  display: flex; gap: 0.6rem; align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  flex-wrap: wrap;
+}
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+.seg button {
+  background: transparent;
+  border: none;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  padding: 0.6em 0.9em;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: all 0.2s;
+  border-right: 1px solid var(--line);
+}
+.seg button:last-child { border-right: none; }
+.seg button.active {
+  background: var(--spark);
+  color: #1a1509;
+  font-weight: 700;
+}
+.seg button:hover:not(.active) { background: var(--bg-lift); color: var(--ink); }
+
+/* =========================================================
+   12. SANDBOX
+   ========================================================= */
+.sandbox {
+  margin-top: 2rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 2rem;
+}
+.sb-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.3rem 2rem;
+  padding-bottom: 1.8rem;
+  margin-bottom: 1.8rem;
+  border-bottom: 1px solid var(--line);
+}
+@media (max-width: 640px) { .sb-controls { grid-template-columns: 1fr; } }
+.ctrl {
+  display: flex; flex-direction: column; gap: 0.55rem;
+}
+.ctrl label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.ctrl .value {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.5rem;
+  color: var(--spark);
+  line-height: 1;
+}
+.slider {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 4px;
+  background: var(--line);
+  border-radius: 999px;
+  outline: none;
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px; height: 18px;
+  background: var(--spark);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.slider::-webkit-slider-thumb:hover { transform: scale(1.18); }
+.slider::-moz-range-thumb {
+  width: 18px; height: 18px;
+  background: var(--spark);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.sb-text {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 0.7em 0.9em;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.sb-text:focus { border-color: var(--spark); }
+
+.sb-result {
+  margin-top: 2rem;
+  padding: 1.4rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
+.sb-result .step-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 1rem; flex-wrap: wrap;
+  margin-bottom: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.sb-result .final-answer {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.8rem;
+}
+.sb-result .final-answer.constant { color: var(--classical); }
+.sb-result .final-answer.balanced { color: var(--quantum); }
+.sb-result .final-answer.solved   { color: var(--spark); }
+
+.sb-section { margin-top: 0.5rem; }
+.sb-section-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 0.6rem;
+}
+
+/* Simon shots table */
+.shot-table {
+  display: grid;
+  grid-template-columns: auto auto auto 1fr;
+  gap: 0;
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+.shot-table > div {
+  padding: 0.55rem 1rem;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex; align-items: center;
+}
+.shot-table > div:nth-last-child(-n+4) { border-bottom: none; }
+.shot-table .sh { background: var(--bg-lift); color: var(--ink-dim); font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase; }
+.shot-table .sh-idx { color: var(--ink-dim); }
+.shot-table .sh-y   { color: var(--ink); font-weight: 500; }
+.shot-table .sh-eq  { color: var(--ink-soft); }
+.shot-table .sh-note { color: var(--ink-dim); font-size: 0.78rem; }
+.shot-table .row-useful .sh-note { color: var(--quantum); }
+.shot-table .row-redundant .sh-note { color: var(--ink-dim); }
+.shot-table .row-zero .sh-note { color: var(--classical); }
+
+.shot-table .row-useful .sh-y { color: var(--quantum); }
+
+/* =========================================================
+   13. OUTRO
+   ========================================================= */
+#outro {
+  background: var(--bg-soft);
+  border-top: 1px solid var(--line);
+  margin-top: 4rem;
+}
+.series-list {
+  margin-top: 2rem;
+  list-style: none;
+  padding: 0;
+}
+.series-list li {
+  padding: 1.1rem 0;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 1.5rem;
+}
+.series-list li:last-child { border-bottom: none; }
+.series-list .num {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+  color: var(--ink-dim);
+  min-width: 3ch;
+}
+.series-list .name {
+  flex: 1;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.4rem;
+  color: var(--ink);
+}
+.series-list .name .done {
+  color: var(--quantum);
+  margin-left: 0.5rem;
+  font-style: normal;
+  font-size: 0.8em;
+}
+.series-list .name .here {
+  color: var(--spark);
+  margin-left: 0.5rem;
+  font-style: normal;
+  font-size: 0.75em;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+}
+.series-list .status {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+}
+
+footer {
+  padding: 3rem 1.5rem 4rem;
+  text-align: center;
+  border-top: 1px solid var(--line);
+  color: var(--ink-dim);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+}
+footer a { color: var(--ink-soft); text-decoration: none; border-bottom: 1px solid var(--line); }
+footer a:hover { color: var(--spark); border-color: var(--spark); }
+
+/* =========================================================
+   14. REVEALS
+   ========================================================= */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.9s var(--ease-out), transform 0.9s var(--ease-out);
+}
+.reveal.seen { opacity: 1; transform: translateY(0); }
+
+/* =========================================================
+   15. RESPONSIVE
+   ========================================================= */
+@media (max-width: 540px) {
+  section { padding: 6rem 1rem; }
+  body    { font-size: 16px; }
+  .game-board, .player, .sandbox { padding: 1.3rem; }
+  .player-body { padding: 1.2rem 0.6rem; }
+  .amp-bar-row { gap: 6px; height: 180px; }
+  .amp-bar .lbl { font-size: 0.58rem; }
+  .circuit-container { margin: 0 -0.6rem; padding: 0 0.6rem; }
+}
+</style>
+</head>
+<body>
+
+<nav class="rail" aria-label="Section progress">
+  <a href="#hero"      data-label="Start"></a>
+  <a href="#promise"   data-label="The promise"></a>
+  <a href="#classical" data-label="Classical"></a>
+  <a href="#curse"     data-label="Scaling"></a>
+  <a href="#quantum"   data-label="Quantum idea"></a>
+  <a href="#algorithm" data-label="Algorithm"></a>
+  <a href="#sandbox"   data-label="Sandbox"></a>
+  <a href="#outro"     data-label="What's next"></a>
+</nav>
+
+<!-- ===================================================
+     SECTION 1: HERO
+     =================================================== -->
+<section id="hero">
+  <div class="hero-bg"><svg id="hero-bars" viewBox="0 0 900 260" preserveAspectRatio="none" aria-hidden="true"></svg></div>
+  <div class="container">
+    <div class="hero-eyebrow"><span class="dot"></span>A hands-on introduction · Quantum algorithms series · №05</div>
+    <h1 class="display" style="font-size: clamp(2.6rem, 7.5vw, 5.8rem)">
+      <span>Quantum&nbsp;Fourier&nbsp;Transform</span>
+    </h1>
+    <p class="hero-sub">The engine that drives quantum phase estimation and Shor's factoring — and the cleanest example of quantum interference doing real work.</p>
+    <div class="hero-meta">
+      <div>Reading time<b>~ 15 minutes</b></div>
+      <div>Prerequisites<b>Comfort with complex numbers helps</b></div>
+      <div>Runs on<b>Your browser</b></div>
+    </div>
+    <div class="scroll-cue">Scroll</div>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 2: THE SETUP
+     =================================================== -->
+<section id="promise">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act I">Frequencies, written in amplitudes.</h2>
+    <p class="lead narrow">A new tool, and a different kind of payoff. The Quantum Fourier Transform takes a quantum state and rewrites it in the basis of <em>frequencies</em>. A periodic structure in the input becomes a sharp peak in the output. A flat input becomes a single delta. The QFT doesn't solve a problem on its own — it's the workhorse that exposes hidden periodicity, which is exactly what the next two algorithms (Phase Estimation and Shor's factoring) will exploit.</p>
+
+    <div class="promise-grid">
+      <article class="promise-card constant">
+        <div class="label">The classical version</div>
+        <h3>The DFT.</h3>
+        <p>The discrete Fourier transform takes <span class="mono">N</span> numbers and returns <span class="mono">N</span> coefficients, one per frequency. A periodic signal of period <span class="mono">r</span> produces large coefficients at multiples of <span class="mono">N/r</span>.</p>
+        <div class="dft-mini" id="dft-classical"></div>
+      </article>
+      <article class="promise-card balanced">
+        <div class="label">The quantum version</div>
+        <h3>The QFT.</h3>
+        <p>The same map, applied to the amplitudes of a quantum state. The transform itself takes only <span class="mono">O(log² N)</span> gates — exponentially fewer than the classical FFT's <span class="mono">O(N log N)</span> arithmetic operations.</p>
+        <div class="dft-mini" id="dft-quantum"></div>
+        <button class="btn ghost" id="shuffle-balanced" style="margin-top:1.2rem">New input ↻</button>
+      </article>
+    </div>
+
+    <p class="narrow" style="margin-top:3rem">There's a catch — the quantum advantage doesn't extract the full coefficient list. A single measurement returns only one frequency, sampled with probability proportional to the squared amplitude. But for problems where one sharp peak is what you're looking for, that's exactly enough.</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 3: CLASSICAL DFT EXPLORER
+     =================================================== -->
+<section id="classical">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act II">Build a feel for the transform.</h2>
+    <p class="lead narrow">Before going quantum, let's get a feel for what the transform <em>does</em>. Below is a 16-point signal you can edit by clicking. The right column shows its DFT — the magnitude of each frequency component. Try the presets, or sketch your own pattern. Watch what kinds of inputs produce what kinds of spectra.</p>
+
+    <aside class="rules-box">
+      <div class="rules-label">How to read this</div>
+      <p>The <strong>signal</strong> is a real function on 16 points — each bar represents one input value. The <strong>spectrum</strong> shows the magnitude of each of the 16 Fourier coefficients. A periodic signal of period <span class="mono">r</span> shows up as a peak at frequency <span class="mono">N/r</span>. A constant signal becomes a single peak at frequency 0. A delta becomes a flat spectrum.</p>
+      <p style="margin-bottom:0">The same mathematical transform applies to quantum amplitudes — that's the QFT. The two big differences are: the QFT can be <em>computed</em> in <span class="mono">O(log² N)</span> gates instead of <span class="mono">O(N log N)</span> arithmetic, and you only get <em>one</em> frequency per measurement, not the full spectrum.</p>
+    </aside>
+
+    <div class="game-board">
+      <div class="game-header">
+        <div class="game-title">Signal & spectrum</div>
+        <div class="dft-presets" id="dft-presets">
+          <button class="btn" data-preset="delta">Delta</button>
+          <button class="btn" data-preset="period2">Period 2</button>
+          <button class="btn" data-preset="period4" class="active">Period 4</button>
+          <button class="btn" data-preset="period8">Period 8</button>
+          <button class="btn" data-preset="random">Random</button>
+          <button class="btn" data-preset="constant">Constant</button>
+        </div>
+      </div>
+
+      <div class="dft-explorer">
+        <div class="dft-panel">
+          <div class="dft-panel-label">Input signal · click to edit</div>
+          <div class="dft-bars dft-input" id="dft-input"></div>
+        </div>
+        <div class="dft-panel">
+          <div class="dft-panel-label">DFT magnitude spectrum</div>
+          <div class="dft-bars dft-spectrum" id="dft-spectrum"></div>
+        </div>
+      </div>
+    </div>
+
+    <p class="narrow" style="margin-top:3rem">Periodic signals concentrate their energy in a few frequencies. The peak position tells you the period: a sharp peak at frequency <span class="mono">k</span> means the signal repeats every <span class="mono">N/k</span> samples. This is the property that quantum phase estimation and Shor's factoring will use to extract a hidden period in polynomial time.</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 4: THE COST
+     =================================================== -->
+<section id="curse">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act III">Polylog gates.</h2>
+    <p class="lead narrow">A classical FFT computes all <span class="mono">N</span> Fourier coefficients in <span class="mono">O(N log N)</span> arithmetic operations. The QFT computes the same transform — represented as a quantum state — in <span class="mono">O(log² N)</span> gates, that is, <span class="mono">O(n²)</span> gates for <span class="mono">n = log₂ N</span> qubits. The catch: a quantum measurement returns just one frequency, sampled with probability proportional to its squared magnitude.</p>
+
+    <div class="curse-chart"><svg viewBox="0 0 760 360" id="curse-svg" aria-label="Classical N log N FFT vs O(n^2) QFT"></svg></div>
+
+    <div class="stat-row">
+      <div class="stat"><div class="k">N = 2¹⁰</div><div class="v">~10,000 <small>FFT ops · ~100 QFT gates</small></div></div>
+      <div class="stat"><div class="k">N = 2²⁰</div><div class="v">~2·10⁷ <small>FFT ops · ~400 QFT gates</small></div></div>
+      <div class="stat"><div class="k">N = 2⁴⁰</div><div class="v">~4·10¹³ <small>FFT ops · ~1,600 QFT gates</small></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 5: QUANTUM IDEA
+     =================================================== -->
+<section id="quantum">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act IV">Amplitudes that turn.</h2>
+    <p class="lead narrow">For the first time in this series, the amplitudes are no longer real. The QFT mixes them through complex roots of unity — phases that rotate around the unit circle. The key formula is short:</p>
+
+    <div class="formula-box">
+      <div class="formula">QFT |x⟩ = (1/√N) Σ<sub>y</sub> e<sup>2πi · xy / N</sup> |y⟩</div>
+      <div class="formula-note">Each computational basis state <span class="mono">|x⟩</span> spreads into a uniform superposition of all states, each weighted by a phase that depends on <span class="mono">x · y</span> mod <span class="mono">N</span>.</div>
+    </div>
+
+    <p class="narrow">A complex amplitude has two pieces: a <em>magnitude</em> (how much it contributes to the probability) and a <em>phase</em> (where it points in the complex plane). The QFT preserves all magnitudes — every output amplitude has magnitude <span class="mono">1/√N</span> — but rearranges the phases. That's where the information lives.</p>
+
+    <p class="narrow">Below: a single qubit in <span class="mono">|0⟩</span>, then in <span class="mono">|1⟩</span>. Watch the phase of each output amplitude as you flip between them.</p>
+
+    <div class="super-demo">
+      <div class="phase-demo" id="phase-demo"></div>
+      <div class="explanation" id="super-text">QFT on <span class="mono">|0⟩</span>: <span class="mono">(|0⟩ + |1⟩)/√2</span>. Both amplitudes positive real. No phase rotation.</div>
+      <div style="margin-top:1.4rem; display:flex; gap:0.7rem; justify-content:center; flex-wrap:wrap">
+        <button class="btn quantum" id="super-hadamard">Switch input |0⟩ ↔ |1⟩</button>
+      </div>
+    </div>
+
+    <p class="narrow" style="margin-top:3rem">Even on a single qubit, you can see the rotation. <span class="mono">QFT|0⟩</span> is a uniform superposition with both amplitudes positive. <span class="mono">QFT|1⟩</span> is also a uniform superposition — but with the second amplitude rotated 180°, that is, made negative. On more qubits, the rotations become finer. The next section shows the actual circuit.</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 6: ALGORITHM
+     =================================================== -->
+<section id="algorithm">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act V">The QFT, gate by gate.</h2>
+    <p class="lead narrow">Here is the QFT circuit for <span class="mono">n = 3</span> qubits. It uses two ingredients: ordinary Hadamards, and <em>controlled phase rotations</em> <span class="mono">R<sub>k</sub></span> that add a phase of <span class="mono">2π/2ᵏ</span> when both qubits are in <span class="mono">|1⟩</span>. After all the rotations, a final layer of swaps reverses the qubit order. Step through it. Watch how each gate edits magnitudes and phases.</p>
+
+    <div class="oracle-picker" style="margin-top:1.8rem; margin-bottom:1rem">
+      <span>Input state:</span>
+      <div class="seg" id="seg-oracle">
+        <button data-s="000">|000⟩</button>
+        <button data-s="001" class="active">|001⟩</button>
+        <button data-s="010">|010⟩</button>
+        <button data-s="011">|011⟩</button>
+        <button data-s="100">|100⟩</button>
+        <button data-s="101">|101⟩</button>
+      </div>
+    </div>
+
+    <div class="player">
+      <div class="player-header">
+        <div class="step-label"><span class="count" id="step-count">Step 0 / N</span><span id="step-name">Initial state</span></div>
+        <div class="step-dots" id="step-dots"></div>
+      </div>
+
+      <div class="player-body">
+        <div class="circuit-container">
+          <svg class="circuit-svg" id="circuit-svg" viewBox="0 0 720 220" aria-label="QFT circuit diagram"></svg>
+        </div>
+
+        <div class="amp-viz">
+          <h4>Amplitudes — magnitude and phase</h4>
+          <div class="complex-bars" id="amp-bars"></div>
+          <div class="amp-legend">
+            <span><span class="chip pos"></span>Amplitude magnitude (height)</span>
+            <span><span class="phase-chip"></span>Phase (color wheel)</span>
+          </div>
+        </div>
+
+        <div class="commentary" id="commentary">All 3 qubits in <span class="mono">|0⟩</span>.</div>
+      </div>
+
+      <div class="player-controls">
+        <button class="btn" id="player-prev">← Prev</button>
+        <button class="btn primary" id="player-play">▶ Play</button>
+        <button class="btn" id="player-next">Next →</button>
+        <div class="spacer"></div>
+        <button class="btn ghost" id="player-reset">Restart</button>
+      </div>
+    </div>
+
+    <p class="narrow" style="margin-top:3rem">After the full QFT, every magnitude is exactly <span class="mono">1/√N</span> — the spectrum is "flat" in magnitude. All the structure of the input lives in the <em>phases</em>. That's why a single measurement after the QFT gives a uniformly random outcome by itself; the QFT only becomes useful when combined with another quantum subroutine that biases the measurement toward a particular phase pattern.</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 7: FREE PLAY
+     =================================================== -->
+<section id="sandbox">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act VI">Free play.</h2>
+    <p class="lead narrow">Pick any input state and run the QFT. Watch the magnitudes flatten and the phases get rearranged. Notice how computational basis states map to spread-out spectra, while uniform superpositions map to sharp peaks.</p>
+
+    <div class="sandbox">
+      <div class="sb-controls">
+        <div class="ctrl">
+          <label>Number of qubits · <span class="value" id="sb-n-val">3</span></label>
+          <input type="range" class="slider" id="sb-n" min="2" max="5" value="3" step="1" />
+        </div>
+        <div class="ctrl">
+          <label>Input preset</label>
+          <div class="seg" id="sb-preset">
+            <button data-p="basis" class="active" style="flex:1">Basis</button>
+            <button data-p="uniform" style="flex:1">Uniform</button>
+            <button data-p="period2" style="flex:1">Period 2</button>
+            <button data-p="period4" style="flex:1">Period 4</button>
+          </div>
+        </div>
+        <div class="ctrl" id="sb-basis-ctrl">
+          <label>Basis state x</label>
+          <input type="text" class="sb-text" id="sb-s" value="001" />
+        </div>
+      </div>
+
+      <div style="display:flex; gap:0.8rem; align-items:center; flex-wrap:wrap">
+        <button class="btn primary" id="sb-run">▶ Apply QFT</button>
+        <button class="btn ghost" id="sb-random">Random basis state ↻</button>
+      </div>
+
+      <div class="sb-result" id="sb-result" style="display:none">
+        <div class="sb-section">
+          <div class="sb-section-label">Input</div>
+          <div class="complex-bars" id="sb-input-bars" style="height:160px"></div>
+        </div>
+        <div class="sb-section" style="margin-top:2rem">
+          <div class="sb-section-label">Output (after QFT)</div>
+          <div class="complex-bars" id="sb-amp-bars" style="height:160px"></div>
+        </div>
+        <p style="color:var(--ink-soft); margin-top:1.6rem; font-size:0.95rem" id="sb-comment">—</p>
+      </div>
+    </div>
+
+    <p class="narrow" style="margin-top:3rem">A few things to notice in the sandbox: a uniform superposition (all amplitudes equal) becomes the basis state <span class="mono">|0…0⟩</span> after QFT — a perfect peak. A periodic state (only every <span class="mono">r</span>-th amplitude non-zero) becomes peaks at multiples of <span class="mono">N/r</span>. This is exactly the property quantum phase estimation will exploit to read off eigenvalues, and Shor's factoring will use to find the period of modular exponentiation.</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 8: OUTRO
+     =================================================== -->
+<section id="outro">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Coda">The bridge to Shor.</h2>
+    <p class="narrow">The QFT on its own gives you nothing — measure a state immediately after applying it and you get a uniformly random outcome. Its power shows up only in <em>composition</em>. Quantum Phase Estimation uses the QFT to read out the eigenphase of a unitary operator. Shor's factoring algorithm uses Phase Estimation, applied to a modular-exponentiation operator, to extract the order of an element modulo <span class="mono">N</span> — and from there, factor <span class="mono">N</span>.</p>
+
+    <p class="narrow">The lesson: in classical computing, fast Fourier transforms are everywhere precisely because so many problems have hidden periodic structure that becomes visible in the frequency domain. The QFT carries that same property to quantum computing — but with an exponentially shorter circuit. That asymmetry is the entire engine of Shor's exponential speedup over classical factoring.</p>
+
+    <h3 style="margin-top:3.5rem; font-style:italic">The series so far.</h3>
+    <ul class="series-list">
+      <li><span class="num">01</span><span class="name">Deutsch–Jozsa <span class="done">✓</span></span><span class="status">Published</span></li>
+      <li><span class="num">02</span><span class="name">Bernstein–Vazirani <span class="done">✓</span></span><span class="status">Published</span></li>
+      <li><span class="num">03</span><span class="name">Simon's algorithm <span class="done">✓</span></span><span class="status">Published</span></li>
+      <li><span class="num">04</span><span class="name">Grover's search <span class="done">✓</span></span><span class="status">Published</span></li>
+      <li><span class="num">05</span><span class="name">Quantum Fourier Transform <span class="here">you are here</span></span><span class="status">Published</span></li>
+      <li><span class="num">06</span><span class="name">Quantum Phase Estimation</span><span class="status">Next</span></li>
+      <li><span class="num">07</span><span class="name">Shor's factoring</span><span class="status">Planned</span></li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  Built as an open invitation to play. Source on <a href="#" id="gh-link">GitHub</a>.
+  No cookies. No tracking. Your browser does all the quantum math.
+</footer>
+
+<script>
+"use strict";
+
+/* =========================================================
+   QFT CORE
+   =========================================================
+   The QFT requires complex amplitudes — it mixes basis states
+   with phases of the form e^(2πi·k/N). We represent a state
+   as two parallel Float64Arrays (real, imag) of length N = 2^n.
+   ========================================================= */
+
+const TWO_PI = 2 * Math.PI;
+
+function makeComplexState(n, valuesArrLike) {
+  // Optionally seed from an array of real numbers (or {re, im} objects).
+  const N = 1 << n;
+  const re = new Float64Array(N);
+  const im = new Float64Array(N);
+  if (valuesArrLike) {
+    for (let i = 0; i < N; i++) {
+      const v = valuesArrLike[i];
+      if (v && typeof v === 'object') {
+        re[i] = v.re || 0;
+        im[i] = v.im || 0;
+      } else {
+        re[i] = v || 0;
+      }
+    }
+  } else {
+    re[0] = 1;
+  }
+  return { n, N, re, im };
+}
+
+function cloneComplexState(s) {
+  return { n: s.n, N: s.N, re: new Float64Array(s.re), im: new Float64Array(s.im) };
+}
+
+/* Apply Hadamard on qubit q. */
+function applyHComplex(s, q) {
+  const mask = 1 << q;
+  const inv = 1 / Math.sqrt(2);
+  for (let i = 0; i < s.N; i++) {
+    if ((i & mask) === 0) {
+      const j = i | mask;
+      const ar = s.re[i], ai = s.im[i];
+      const br = s.re[j], bi = s.im[j];
+      s.re[i] = (ar + br) * inv;
+      s.im[i] = (ai + bi) * inv;
+      s.re[j] = (ar - br) * inv;
+      s.im[j] = (ai - bi) * inv;
+    }
+  }
+}
+
+/* Apply controlled phase rotation R_k:
+   if both control and target are |1⟩, multiply amplitude by e^(2πi/2^k). */
+function applyCRkComplex(s, ctrl, tgt, k) {
+  const cMask = 1 << ctrl, tMask = 1 << tgt;
+  const angle = TWO_PI / (1 << k);
+  const c = Math.cos(angle), si = Math.sin(angle);
+  for (let i = 0; i < s.N; i++) {
+    if ((i & cMask) && (i & tMask)) {
+      const ar = s.re[i], ai = s.im[i];
+      s.re[i] = ar * c - ai * si;
+      s.im[i] = ar * si + ai * c;
+    }
+  }
+}
+
+/* Swap qubits a and b. */
+function applySwapComplex(s, a, b) {
+  if (a === b) return;
+  const aMask = 1 << a, bMask = 1 << b;
+  for (let i = 0; i < s.N; i++) {
+    // Process each pair (i, j) where i has bit_a=1, bit_b=0 and j has bit_a=0, bit_b=1
+    // We pick i as the one with bit_a set and bit_b clear (each pair processed once).
+    if ((i & aMask) && !(i & bMask)) {
+      const j = (i ^ aMask) | bMask;
+      const tr = s.re[i]; s.re[i] = s.re[j]; s.re[j] = tr;
+      const ti = s.im[i]; s.im[i] = s.im[j]; s.im[j] = ti;
+    }
+  }
+}
+
+/* Build the gate sequence for QFT on n qubits.
+   Standard textbook form (MSB-first iteration): for j from n-1 down to 0,
+   apply H to qubit j, then for each k from 2 to j+1, apply controlled R_k
+   from qubit j-k+1 to j. Finally swap qubit i with qubit n-1-i for i in [0, n/2).
+   This produces QFT|x⟩ = (1/√N) Σ e^(2πi xy/N) |y⟩ with the natural bit ordering. */
+function qftGateSequence(n) {
+  const gates = [];
+  for (let j = n - 1; j >= 0; j--) {
+    gates.push(["H", j]);
+    for (let k = 2; k <= j + 1; k++) {
+      gates.push(["CRk", j - k + 1, j, k]);
+    }
+  }
+  for (let i = 0; i < Math.floor(n / 2); i++) {
+    gates.push(["SWAP", i, n - 1 - i]);
+  }
+  return gates;
+}
+
+function applyComplexGate(s, g) {
+  if (g[0] === "H") applyHComplex(s, g[1]);
+  else if (g[0] === "CRk") applyCRkComplex(s, g[1], g[2], g[3]);
+  else if (g[0] === "SWAP") applySwapComplex(s, g[1], g[2]);
+}
+
+/* Build the sequence of "scenes" for the QFT player.
+   Initial state is the computational basis state |inputBitstring⟩.
+   Each scene corresponds to one gate, plus an initial scene
+   and a final "measure" scene. */
+function buildScenes(n, inputBitstring) {
+  const N = 1 << n;
+  const inputIdx = parseInt(inputBitstring, 2);
+
+  // Start from |inputBitstring⟩
+  const state = makeComplexState(n);
+  state.re[0] = 0;
+  state.re[inputIdx] = 1;
+
+  const scenes = [];
+  scenes.push({
+    label: "Initial state",
+    commentary: `The state is the basis state <span class="mono">|${inputBitstring}⟩</span>. One amplitude is exactly 1 (real, positive); the rest are 0.`,
+    highlight: -1,
+    re: Array.from(state.re),
+    im: Array.from(state.im),
+  });
+
+  const gates = qftGateSequence(n);
+  for (let i = 0; i < gates.length; i++) {
+    const g = gates[i];
+    applyComplexGate(state, g);
+    let label, commentary;
+    if (g[0] === "H") {
+      label = `H on qubit q${g[1]}`;
+      commentary = `Hadamard on qubit <span class="mono">q${g[1]}</span>. Half the amplitudes split into pairs and recombine; some pick up a sign flip. Each H halves the magnitudes of any non-zero amplitudes and creates new ones.`;
+    } else if (g[0] === "CRk") {
+      const angle = 360 / (1 << g[3]);
+      label = `CR${g[3]} (q${g[1]} → q${g[2]})`;
+      commentary = `Controlled phase rotation. When both <span class="mono">q${g[1]}</span> and <span class="mono">q${g[2]}</span> are <span class="mono">|1⟩</span>, multiply the amplitude by <span class="mono">e^(2πi/2^${g[3]})</span> — that's a rotation of <span class="mono">${angle.toFixed(1)}°</span> in the complex plane. The magnitudes don't change; only the phases.`;
+    } else if (g[0] === "SWAP") {
+      label = `SWAP q${g[1]} ↔ q${g[2]}`;
+      commentary = `Swap qubits <span class="mono">q${g[1]}</span> and <span class="mono">q${g[2]}</span>. The QFT algorithm produces the output with qubit ordering reversed compared to the standard convention, so a final swap layer fixes that.`;
+    }
+    scenes.push({
+      label,
+      commentary,
+      highlight: i,
+      re: Array.from(state.re),
+      im: Array.from(state.im),
+      gate: g,
+    });
+  }
+
+  scenes.push({
+    label: "Result",
+    commentary: `QFT complete. Every magnitude is now <span class="mono">1/√${N} ≈ ${(1/Math.sqrt(N)).toFixed(3)}</span>. All the structure is in the phases — they encode the input <span class="mono">x = ${inputIdx}</span> as the rotation rate around the unit circle.`,
+    highlight: gates.length,
+    re: Array.from(state.re),
+    im: Array.from(state.im),
+    isFinal: true,
+  });
+
+  return { scenes, n, N, inputIdx, inputBitstring, gates };
+}
+
+/* Apply full QFT (used by sandbox). Returns final state. */
+function applyFullQFT(state) {
+  for (const g of qftGateSequence(state.n)) applyComplexGate(state, g);
+  return state;
+}
+
+/* Classical DFT over a real input vector — used by Act II explorer. */
+function classicalDFT(realInput) {
+  const N = realInput.length;
+  const re = new Float64Array(N);
+  const im = new Float64Array(N);
+  for (let k = 0; k < N; k++) {
+    let r = 0, i = 0;
+    for (let n = 0; n < N; n++) {
+      const angle = -TWO_PI * k * n / N;
+      r += realInput[n] * Math.cos(angle);
+      i += realInput[n] * Math.sin(angle);
+    }
+    re[k] = r / Math.sqrt(N);
+    im[k] = i / Math.sqrt(N);
+  }
+  return { re, im };
+}
+
+
+function pad(x, n) { return x.toString(2).padStart(n, "0"); }
+
+/* --------- HERO BACKGROUND BARS ---------- */
+(function heroBars() {
+  const svg = document.getElementById("hero-bars");
+  const N = 32;
+  const W = 900, H = 260;
+  let out = "";
+  for (let i = 0; i < N; i++) {
+    const x = (W / N) * i + 4;
+    const h = 30 + Math.random() * 180;
+    const y = H/2 - h/2;
+    const color = Math.random() > 0.5 ? "#7bd3c8" : "#e89a5a";
+    const dur = (2 + Math.random() * 2).toFixed(2);
+    const delay = (Math.random() * 3).toFixed(2);
+    out += `<rect x="${x}" y="${y}" width="${(W/N) - 8}" height="${h}" fill="${color}" opacity="0.8">
+      <animate attributeName="height" values="${h};${h * 0.4};${h}" dur="${dur}s" begin="${delay}s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="${y};${y + h*0.3};${y}" dur="${dur}s" begin="${delay}s" repeatCount="indefinite"/>
+    </rect>`;
+  }
+  svg.innerHTML = out;
+})();
+
+/* --------- PROMISE SECTION: SIGNAL + SPECTRUM PREVIEW ---------- */
+const PROMISE_N = 16;
+
+function randomNonNegativeSignal(N) {
+  // A clean periodic signal as default for the preview
+  const arr = new Array(N).fill(0);
+  const period = 4;
+  for (let i = 0; i < N; i++) arr[i] = i % period === 0 ? 1 : 0;
+  return arr;
+}
+
+function renderMiniDFT(input, classicalMode) {
+  // Take the input (real array), compute DFT, render side-by-side bars in a single row inside the card
+  const dft = classicalDFT(input);
+  const mags = new Array(input.length);
+  let maxMag = 0;
+  for (let i = 0; i < input.length; i++) {
+    mags[i] = Math.sqrt(dft.re[i] * dft.re[i] + dft.im[i] * dft.im[i]);
+    if (mags[i] > maxMag) maxMag = mags[i];
+  }
+  const maxIn = Math.max(...input.map(Math.abs), 0.0001);
+  function rowBars(arr, max, classCls) {
+    let h = '';
+    for (let i = 0; i < arr.length; i++) {
+      const heightPct = max > 0 ? Math.max(2, Math.abs(arr[i]) / max * 100) : 1;
+      h += `<div class="dft-mini-bar${classCls ? ' cls' : ''}" style="height:${heightPct}%"></div>`;
+    }
+    return h;
+  }
+  return `
+    <div class="dft-mini-row"><span class="lbl">Signal</span><div class="dft-mini-bars">${rowBars(input, maxIn, classicalMode)}</div></div>
+    <div class="dft-mini-row"><span class="lbl">Spectrum</span><div class="dft-mini-bars">${rowBars(mags, maxMag, classicalMode)}</div></div>`;
+}
+
+let demoSignal = randomNonNegativeSignal(PROMISE_N);
+function renderPromiseCards() {
+  document.getElementById("dft-classical").innerHTML = renderMiniDFT(demoSignal, true);
+  document.getElementById("dft-quantum").innerHTML = renderMiniDFT(demoSignal, false);
+}
+renderPromiseCards();
+document.getElementById("shuffle-balanced").addEventListener("click", () => {
+  // Rotate through a few clean patterns
+  const patterns = [
+    () => randomNonNegativeSignal(PROMISE_N),  // period 4
+    () => Array.from({length: PROMISE_N}, (_, i) => i === 0 ? 1 : 0),  // delta
+    () => Array.from({length: PROMISE_N}, () => 1),  // constant
+    () => Array.from({length: PROMISE_N}, (_, i) => i % 2 === 0 ? 1 : 0),  // period 2
+    () => Array.from({length: PROMISE_N}, () => Math.random()),  // random
+  ];
+  const p = patterns[Math.floor(Math.random() * patterns.length)];
+  demoSignal = p();
+  renderPromiseCards();
+});
+
+
+/* =========================================================
+   CLASSICAL DFT EXPLORER (Act II)
+   ========================================================= */
+const DFT_N = 16;
+let dftSignal = new Array(DFT_N).fill(0);
+
+function dftPreset(name) {
+  const N = DFT_N;
+  switch (name) {
+    case "delta":
+      dftSignal = new Array(N).fill(0);
+      dftSignal[0] = 1;
+      break;
+    case "period2":
+      dftSignal = Array.from({length: N}, (_, i) => i % 2 === 0 ? 1 : 0);
+      break;
+    case "period4":
+      dftSignal = Array.from({length: N}, (_, i) => i % 4 === 0 ? 1 : 0);
+      break;
+    case "period8":
+      dftSignal = Array.from({length: N}, (_, i) => i % 8 === 0 ? 1 : 0);
+      break;
+    case "constant":
+      dftSignal = new Array(N).fill(1);
+      break;
+    case "random":
+      dftSignal = Array.from({length: N}, () => Math.random());
+      break;
+  }
+  renderDFTExplorer();
+}
+
+function renderDFTExplorer() {
+  const inputEl = document.getElementById("dft-input");
+  const specEl  = document.getElementById("dft-spectrum");
+
+  // DFT
+  const dft = classicalDFT(dftSignal);
+  const mags = new Array(DFT_N);
+  for (let i = 0; i < DFT_N; i++) {
+    mags[i] = Math.sqrt(dft.re[i] * dft.re[i] + dft.im[i] * dft.im[i]);
+  }
+  const maxIn = Math.max(...dftSignal.map(Math.abs), 0.0001);
+  const maxMag = Math.max(...mags, 0.0001);
+
+  // Render input bars (clickable)
+  inputEl.innerHTML = "";
+  for (let i = 0; i < DFT_N; i++) {
+    const bar = document.createElement("div");
+    bar.className = "dft-bar cls";
+    bar.dataset.idx = i;
+    const heightPct = Math.max(2, Math.abs(dftSignal[i]) / maxIn * 100);
+    bar.style.height = heightPct + "%";
+    bar.title = `x[${i}] = ${dftSignal[i].toFixed(3)}`;
+    inputEl.appendChild(bar);
+  }
+
+  // Render spectrum bars
+  specEl.innerHTML = "";
+  for (let i = 0; i < DFT_N; i++) {
+    const bar = document.createElement("div");
+    bar.className = "dft-bar";
+    const heightPct = Math.max(2, mags[i] / maxMag * 100);
+    bar.style.height = heightPct + "%";
+    bar.title = `|F[${i}]| = ${mags[i].toFixed(3)}`;
+    specEl.appendChild(bar);
+  }
+}
+
+document.querySelectorAll("#dft-presets .btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#dft-presets .btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    dftPreset(btn.dataset.preset);
+  });
+});
+
+// Click + drag on input bars to edit values
+(function dragInput() {
+  const inputEl = document.getElementById("dft-input");
+  let dragging = null;
+  function valueFromY(rect, y) {
+    const rel = 1 - (y - rect.top) / rect.height;
+    return Math.max(0, Math.min(1, rel));
+  }
+  inputEl.addEventListener("mousedown", (e) => {
+    const bar = e.target.closest(".dft-bar");
+    if (!bar) return;
+    dragging = parseInt(bar.dataset.idx);
+    bar.classList.add("dragging");
+    const rect = inputEl.getBoundingClientRect();
+    dftSignal[dragging] = valueFromY(rect, e.clientY);
+    renderDFTExplorer();
+    document.querySelectorAll("#dft-presets .btn").forEach(b => b.classList.remove("active"));
+  });
+  document.addEventListener("mousemove", (e) => {
+    if (dragging === null) return;
+    const rect = inputEl.getBoundingClientRect();
+    dftSignal[dragging] = valueFromY(rect, e.clientY);
+    renderDFTExplorer();
+  });
+  document.addEventListener("mouseup", () => {
+    dragging = null;
+    document.querySelectorAll(".dft-bar.dragging").forEach(b => b.classList.remove("dragging"));
+  });
+})();
+
+// Initial preset
+dftPreset("period4");
+document.querySelector('#dft-presets .btn[data-preset="period4"]').classList.add("active");
+
+
+/* =========================================================
+   COST CHART — N log N classical FFT vs (log N)^2 QFT gates
+   ========================================================= */
+(function curseChart() {
+  const svg = document.getElementById("curse-svg");
+  const W = 760, H = 360, PAD_L = 60, PAD_R = 20, PAD_T = 30, PAD_B = 50;
+  const ns = [];
+  for (let n = 2; n <= 40; n += 2) ns.push(n);
+  // Classical FFT: N log2 N where N = 2^n
+  const classical = ns.map(n => Math.pow(2, n) * n);
+  // QFT: n^2 / 2 gates approximately
+  const quantum = ns.map(n => n * n);
+  const maxVal = classical[classical.length - 1];
+  const minLog = 0, maxLog = Math.log10(maxVal);
+
+  const px = (n) => PAD_L + ((n - ns[0]) / (ns[ns.length - 1] - ns[0])) * (W - PAD_L - PAD_R);
+  const py = (v) => PAD_T + (1 - (Math.log10(Math.max(v, 1)) - minLog) / (maxLog - minLog)) * (H - PAD_T - PAD_B);
+
+  let html = "";
+  for (let k = 0; k <= Math.ceil(maxLog); k += 2) {
+    const v = Math.pow(10, k);
+    if (v > maxVal) break;
+    const y = py(v);
+    html += `<line x1="${PAD_L}" y1="${y}" x2="${W - PAD_R}" y2="${y}" stroke="#3a3128" stroke-width="0.5" stroke-dasharray="2,3"/>`;
+    html += `<text x="${PAD_L - 8}" y="${y + 4}" text-anchor="end" fill="#8a806d" font-family="JetBrains Mono" font-size="10">10^${k}</text>`;
+  }
+  // X-axis ticks every 8
+  for (const n of ns) {
+    if (n % 8 === 0 || n === ns[0]) {
+      html += `<text x="${px(n)}" y="${H - PAD_B + 18}" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="10">n=${n}</text>`;
+    }
+  }
+  html += `<line x1="${PAD_L}" y1="${PAD_T}" x2="${PAD_L}" y2="${H - PAD_B}" stroke="#3a3128"/>`;
+  html += `<line x1="${PAD_L}" y1="${H - PAD_B}" x2="${W - PAD_R}" y2="${H - PAD_B}" stroke="#3a3128"/>`;
+
+  const classicalPts = ns.map((n, i) => `${px(n)},${py(classical[i])}`).join(" ");
+  html += `<polyline points="${classicalPts}" fill="none" stroke="#e89a5a" stroke-width="2.2" stroke-linejoin="round"/>`;
+  for (let i = 0; i < ns.length; i++) {
+    if (ns[i] % 8 === 0 || ns[i] === ns[0]) {
+      html += `<circle cx="${px(ns[i])}" cy="${py(classical[i])}" r="4.5" fill="#e89a5a" stroke="#17130f" stroke-width="2"/>`;
+    }
+  }
+  const quantumPts = ns.map((n, i) => `${px(n)},${py(quantum[i])}`).join(" ");
+  html += `<polyline points="${quantumPts}" fill="none" stroke="#7bd3c8" stroke-width="2.2"/>`;
+  for (let i = 0; i < ns.length; i++) {
+    if (ns[i] % 8 === 0 || ns[i] === ns[0]) {
+      html += `<circle cx="${px(ns[i])}" cy="${py(quantum[i])}" r="4.5" fill="#7bd3c8" stroke="#17130f" stroke-width="2"/>`;
+    }
+  }
+
+  html += `<text x="${px(ns[ns.length - 1]) - 8}" y="${py(classical[classical.length - 1]) - 14}" text-anchor="end" fill="#e89a5a" font-family="Instrument Serif" font-style="italic" font-size="16">classical FFT · N log N</text>`;
+  html += `<text x="${px(ns[ns.length - 1]) - 8}" y="${py(quantum[quantum.length - 1]) - 14}" text-anchor="end" fill="#7bd3c8" font-family="Instrument Serif" font-style="italic" font-size="16">QFT · ~n² gates</text>`;
+  html += `<text x="${W / 2}" y="${H - 12}" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="10" letter-spacing="2">QUBITS n  (N = 2ⁿ)</text>`;
+  html += `<text transform="translate(16,${H/2}) rotate(-90)" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="10" letter-spacing="2">OPERATIONS (log)</text>`;
+
+  svg.innerHTML = html;
+})();
+
+/* =========================================================
+   PHASE DEMO (Act IV) — QFT|0⟩ vs QFT|1⟩
+   ========================================================= */
+(function phaseDemo() {
+  const container = document.getElementById("phase-demo");
+  const text = document.getElementById("super-text");
+  let inputBit = 0;
+
+  function arrowSvg(re, im) {
+    // Render a unit-circle compass with an arrow at angle = atan2(im, re),
+    // length = sqrt(re² + im²) (normalized so 1/√2 fills most of the circle).
+    const cx = 55, cy = 55;
+    const R = 40;
+    const mag = Math.sqrt(re*re + im*im);
+    const norm = mag > 0 ? Math.min(R, mag * R * Math.SQRT2) : 0;
+    const angle = Math.atan2(im, re);
+    const tipX = cx + norm * Math.cos(angle);
+    const tipY = cy - norm * Math.sin(angle);
+    return `<svg viewBox="0 0 110 110" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="#3a3128" stroke-width="1" stroke-dasharray="2,3"/>
+      <line x1="${cx - R - 4}" y1="${cy}" x2="${cx + R + 4}" y2="${cy}" stroke="#3a3128" stroke-width="0.5"/>
+      <line x1="${cx}" y1="${cy - R - 4}" x2="${cx}" y2="${cy + R + 4}" stroke="#3a3128" stroke-width="0.5"/>
+      <line x1="${cx}" y1="${cy}" x2="${tipX}" y2="${tipY}" stroke="#7bd3c8" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="${tipX}" cy="${tipY}" r="3.5" fill="#7bd3c8"/>
+    </svg>`;
+  }
+
+  function render() {
+    // QFT on a single qubit, input |0⟩ or |1⟩, gives:
+    //   QFT|0⟩ = (|0⟩ + |1⟩)/√2  (both real, positive)
+    //   QFT|1⟩ = (|0⟩ - |1⟩)/√2  (second amp negative real = phase 180°)
+    const inv = 1 / Math.sqrt(2);
+    const re = [inv, inputBit === 0 ? inv : -inv];
+    const im = [0, 0];
+
+    container.innerHTML = "";
+    for (let k = 0; k < 2; k++) {
+      const wrap = document.createElement("div");
+      wrap.className = "phase-amp";
+      wrap.innerHTML = `${arrowSvg(re[k], im[k])}<span class="label">|${k}⟩</span><span class="desc">amp = ${re[k] >= 0 ? '+' : ''}${re[k].toFixed(3)}</span>`;
+      container.appendChild(wrap);
+    }
+
+    text.innerHTML = inputBit === 0
+      ? `QFT on <span class="mono">|0⟩</span>: <span class="mono">(|0⟩ + |1⟩)/√2</span>. Both amplitudes positive real. No phase rotation.`
+      : `QFT on <span class="mono">|1⟩</span>: <span class="mono">(|0⟩ − |1⟩)/√2</span>. The second amplitude has phase π — its arrow points the opposite direction.`;
+  }
+  render();
+
+  document.getElementById("super-hadamard").addEventListener("click", () => {
+    inputBit = 1 - inputBit;
+    render();
+  });
+})();
+
+/* =========================================================
+   ALGORITHM PLAYER (QFT, n = 3)
+   ========================================================= */
+const PLAYER_N = 3;
+let currentInput = "001";
+let playerScenes = null;
+let playerStep = 0;
+let playerTimer = null;
+
+/* Convert phase angle (radians) to a CSS color from a wheel.
+   We map angle -> hue, full saturation/value. */
+function phaseColor(re, im) {
+  const angle = Math.atan2(im, re);
+  const hue = ((angle / Math.PI) * 180 + 360) % 360;
+  return `hsl(${hue}, 70%, 60%)`;
+}
+
+/* SVG arrow on unit circle showing complex phase. */
+function phaseArrowSvg(re, im, size = 32) {
+  const c = size / 2;
+  const R = c - 3;
+  const mag = Math.sqrt(re*re + im*im);
+  if (mag < 0.01) {
+    return `<svg viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="${c}" cy="${c}" r="${R}" fill="none" stroke="#3a3128" stroke-width="0.8"/>
+      <circle cx="${c}" cy="${c}" r="2" fill="#3a3128"/>
+    </svg>`;
+  }
+  const angle = Math.atan2(im, re);
+  const tipX = c + R * Math.cos(angle);
+  const tipY = c - R * Math.sin(angle);
+  const color = phaseColor(re, im);
+  return `<svg viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="${c}" cy="${c}" r="${R}" fill="none" stroke="#3a3128" stroke-width="0.8"/>
+    <line x1="${c}" y1="${c}" x2="${tipX}" y2="${tipY}" stroke="${color}" stroke-width="1.8" stroke-linecap="round"/>
+    <circle cx="${tipX}" cy="${tipY}" r="2" fill="${color}"/>
+  </svg>`;
+}
+
+function renderComplexBars(container, re, im, n, dense) {
+  container.innerHTML = "";
+  container.classList.toggle("dense", !!dense);
+  const N = re.length;
+  // Compute max magnitude for scaling
+  let maxMag = 0;
+  const mags = new Array(N);
+  for (let i = 0; i < N; i++) {
+    mags[i] = Math.sqrt(re[i] * re[i] + im[i] * im[i]);
+    if (mags[i] > maxMag) maxMag = mags[i];
+  }
+  if (maxMag < 1e-9) maxMag = 1;
+
+  for (let i = 0; i < N; i++) {
+    const bar = document.createElement("div");
+    bar.className = "complex-bar";
+    const heightPct = (mags[i] / maxMag) * 100;
+    const color = mags[i] > 0.01 ? phaseColor(re[i], im[i]) : "var(--ink-dim)";
+    bar.innerHTML = `<div class="phase-arrow">${phaseArrowSvg(re[i], im[i], 32)}</div><div class="fill" style="height:${heightPct}%; background:${color}"></div><span class="lbl">|${pad(i, n)}⟩</span>`;
+    container.appendChild(bar);
+  }
+}
+
+function currentAmplitudes() {
+  const scene = playerScenes.scenes[playerStep];
+  return { re: scene.re, im: scene.im };
+}
+
+/* Render the QFT circuit. Each gate is a separate column.
+   The current scene's `highlight` is the index in playerScenes.gates of
+   the gate that just got applied (or -1 for the initial state, gates.length for measure). */
+function renderCircuit(n, scene) {
+  const svg = document.getElementById("circuit-svg");
+  const gates = playerScenes.gates;
+  const totalCols = gates.length + 1;  // +1 for measure column
+  const W = Math.max(720, 80 * totalCols + 130);
+  const H = 50 + n * 40 + 20;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+
+  const startX = 110;
+  const endX = W - 30;
+  const colW = (endX - startX) / totalCols;
+  const colX = (idx) => startX + (idx + 0.5) * colW;
+  const wireY = (q) => 50 + q * 40;
+
+  let html = "";
+  // Wires
+  for (let q = 0; q < n; q++) {
+    html += `<text x="30" y="${wireY(q) + 4}" fill="#c5b9a0" font-family="JetBrains Mono" font-size="12">q${q}</text>`;
+    html += `<text x="70" y="${wireY(q) + 4}" fill="#8a806d" font-family="JetBrains Mono" font-size="12">|0⟩</text>`;
+    html += `<line x1="95" y1="${wireY(q)}" x2="${W - 20}" y2="${wireY(q)}" stroke="#3a3128" stroke-width="1"/>`;
+  }
+
+  function gateBox(cx, cy, label, highlighted) {
+    const w = 30, h = 26;
+    const stroke = highlighted ? "#f5d547" : "#c5b9a0";
+    const bg     = highlighted ? "#f5d547" : "#17130f";
+    const textC  = highlighted ? "#1a1509" : "#f1e6ce";
+    return `<rect x="${cx - w/2}" y="${cy - h/2}" width="${w}" height="${h}" rx="3" fill="${bg}" stroke="${stroke}" stroke-width="1.5"/>
+            <text x="${cx}" y="${cy + 5}" text-anchor="middle" fill="${textC}" font-family="Instrument Serif" font-style="italic" font-size="16">${label}</text>`;
+  }
+  function controlDot(cx, cy, highlighted) {
+    const fill = highlighted ? "#f5d547" : "#7bd3c8";
+    return `<circle cx="${cx}" cy="${cy}" r="5" fill="${fill}"/>`;
+  }
+  function vline(cx, y1, y2, highlighted) {
+    const stroke = highlighted ? "#f5d547" : "#7bd3c8";
+    return `<line x1="${cx}" y1="${y1}" x2="${cx}" y2="${y2}" stroke="${stroke}" stroke-width="1.6"/>`;
+  }
+  function rkBox(cx, cy, k, highlighted) {
+    const w = 38, h = 26;
+    const stroke = highlighted ? "#f5d547" : "#7bd3c8";
+    const bg     = highlighted ? "#f5d547" : "#17130f";
+    const textC  = highlighted ? "#1a1509" : "#f1e6ce";
+    return `<rect x="${cx - w/2}" y="${cy - h/2}" width="${w}" height="${h}" rx="3" fill="${bg}" stroke="${stroke}" stroke-width="1.5"/>
+            <text x="${cx}" y="${cy + 5}" text-anchor="middle" fill="${textC}" font-family="Instrument Serif" font-style="italic" font-size="14">R<tspan font-size="10" baseline-shift="sub">${k}</tspan></text>`;
+  }
+  function swapMark(cx, cy) {
+    return `<line x1="${cx-6}" y1="${cy-6}" x2="${cx+6}" y2="${cy+6}" stroke="#f1e6ce" stroke-width="1.8"/>
+            <line x1="${cx+6}" y1="${cy-6}" x2="${cx-6}" y2="${cy+6}" stroke="#f1e6ce" stroke-width="1.8"/>`;
+  }
+
+  // Render each gate column
+  for (let i = 0; i < gates.length; i++) {
+    const g = gates[i];
+    const hl = scene.highlight === i;
+    const cx = colX(i);
+    if (g[0] === "H") {
+      html += gateBox(cx, wireY(g[1]), "H", hl);
+    } else if (g[0] === "CRk") {
+      const ctrlQ = g[1], tgtQ = g[2], k = g[3];
+      const yC = wireY(ctrlQ), yT = wireY(tgtQ);
+      const yMin = Math.min(yC, yT), yMax = Math.max(yC, yT);
+      html += vline(cx, yMin, yMax, hl);
+      html += controlDot(cx, yC, hl);
+      html += rkBox(cx, yT, k, hl);
+    } else if (g[0] === "SWAP") {
+      const yA = wireY(g[1]), yB = wireY(g[2]);
+      const yMin = Math.min(yA, yB), yMax = Math.max(yA, yB);
+      html += vline(cx, yMin, yMax, hl);
+      html += swapMark(cx, yA);
+      html += swapMark(cx, yB);
+    }
+  }
+
+  // Final measurement column
+  const mCx = colX(gates.length);
+  const mHl = scene.highlight === gates.length;
+  for (let q = 0; q < n; q++) {
+    const cy = wireY(q);
+    const stroke = mHl ? "#f5d547" : "#c5b9a0";
+    const bg     = mHl ? "#f5d547" : "#17130f";
+    const textC  = mHl ? "#1a1509" : "#f1e6ce";
+    html += `<rect x="${mCx - 15}" y="${cy - 13}" width="30" height="26" rx="3" fill="${bg}" stroke="${stroke}" stroke-width="1.5"/>
+             <path d="M${mCx - 8},${cy + 5} A 8 8 0 0 1 ${mCx + 8},${cy + 5}" fill="none" stroke="${textC}" stroke-width="1.5"/>
+             <line x1="${mCx}" y1="${cy + 5}" x2="${mCx + 6}" y2="${cy - 4}" stroke="${textC}" stroke-width="1.5"/>`;
+  }
+
+  svg.innerHTML = html;
+}
+
+function renderPlayerStep() {
+  const scene = playerScenes.scenes[playerStep];
+  document.getElementById("step-count").textContent = `Step ${playerStep} / ${playerScenes.scenes.length - 1}`;
+  document.getElementById("step-name").textContent = scene.label;
+  document.getElementById("commentary").innerHTML = scene.commentary;
+
+  const dots = document.getElementById("step-dots");
+  dots.innerHTML = "";
+  for (let i = 0; i < playerScenes.scenes.length; i++) {
+    const d = document.createElement("div");
+    d.className = "dot " + (i < playerStep ? "done" : i === playerStep ? "active" : "");
+    dots.appendChild(d);
+  }
+
+  renderCircuit(PLAYER_N, scene);
+
+  const { re, im } = currentAmplitudes();
+  const container = document.getElementById("amp-bars");
+  renderComplexBars(container, re, im, PLAYER_N, false);
+
+  document.getElementById("player-prev").disabled = playerStep === 0;
+  document.getElementById("player-next").disabled = playerStep === playerScenes.scenes.length - 1;
+}
+
+function rebuildPlayer() {
+  playerScenes = buildScenes(PLAYER_N, currentInput);
+  playerStep = 0;
+  renderPlayerStep();
+}
+
+document.querySelectorAll("#seg-oracle button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#seg-oracle button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentInput = btn.dataset.s;
+    rebuildPlayer();
+  });
+});
+
+document.getElementById("player-next").addEventListener("click", () => {
+  if (playerStep < playerScenes.scenes.length - 1) { playerStep++; renderPlayerStep(); }
+});
+document.getElementById("player-prev").addEventListener("click", () => {
+  if (playerStep > 0) { playerStep--; renderPlayerStep(); }
+});
+document.getElementById("player-reset").addEventListener("click", () => {
+  stopPlayer();
+  playerStep = 0;
+  renderPlayerStep();
+});
+document.getElementById("player-play").addEventListener("click", () => {
+  if (playerTimer) { stopPlayer(); return; }
+  if (playerStep === playerScenes.scenes.length - 1) playerStep = 0;
+  document.getElementById("player-play").textContent = "⏸ Pause";
+  playerTimer = setInterval(() => {
+    if (playerStep < playerScenes.scenes.length - 1) {
+      playerStep++;
+      renderPlayerStep();
+    } else {
+      stopPlayer();
+    }
+  }, 1100);
+});
+function stopPlayer() {
+  if (playerTimer) { clearInterval(playerTimer); playerTimer = null; }
+  document.getElementById("player-play").textContent = "▶ Play";
+}
+
+rebuildPlayer();
+
+/* =========================================================
+   SANDBOX — apply QFT to a chosen input state
+   ========================================================= */
+let sbN = 3;
+let sbPreset = "basis";
+let sbBasis = "001";
+
+const sbNSlider = document.getElementById("sb-n");
+const sbNVal    = document.getElementById("sb-n-val");
+const sbSInput  = document.getElementById("sb-s");
+const sbBasisCtrl = document.getElementById("sb-basis-ctrl");
+
+function reshapeBasis() {
+  if (sbBasis.length < sbN) sbBasis = sbBasis + "0".repeat(sbN - sbBasis.length);
+  else if (sbBasis.length > sbN) sbBasis = sbBasis.slice(-sbN);
+  sbSInput.value = sbBasis;
+}
+
+function syncSandboxUI() {
+  sbNVal.textContent = sbN;
+  reshapeBasis();
+  sbBasisCtrl.style.display = sbPreset === "basis" ? "flex" : "none";
+  runSandbox();
+}
+
+function makeInputState(n, preset, basis) {
+  const N = 1 << n;
+  const re = new Float64Array(N);
+  const im = new Float64Array(N);
+  if (preset === "basis") {
+    const idx = parseInt(basis, 2);
+    if (!isNaN(idx) && idx < N) re[idx] = 1;
+  } else if (preset === "uniform") {
+    const v = 1 / Math.sqrt(N);
+    for (let i = 0; i < N; i++) re[i] = v;
+  } else if (preset === "period2") {
+    // Only even indices, normalized
+    let count = 0;
+    for (let i = 0; i < N; i += 2) count++;
+    const v = 1 / Math.sqrt(count);
+    for (let i = 0; i < N; i += 2) re[i] = v;
+  } else if (preset === "period4") {
+    let count = 0;
+    for (let i = 0; i < N; i += 4) count++;
+    const v = 1 / Math.sqrt(count);
+    for (let i = 0; i < N; i += 4) re[i] = v;
+  }
+  return { n, N, re, im };
+}
+
+function runSandbox() {
+  const inputState = makeInputState(sbN, sbPreset, sbBasis);
+  const inRe = Array.from(inputState.re);
+  const inIm = Array.from(inputState.im);
+
+  // Apply QFT
+  const outState = makeInputState(sbN, sbPreset, sbBasis);  // fresh copy
+  applyFullQFT(outState);
+
+  const inputContainer = document.getElementById("sb-input-bars");
+  const outputContainer = document.getElementById("sb-amp-bars");
+  const dense = sbN >= 4;
+  renderComplexBars(inputContainer, inRe, inIm, sbN, dense);
+  renderComplexBars(outputContainer, Array.from(outState.re), Array.from(outState.im), sbN, dense);
+
+  const comment = document.getElementById("sb-comment");
+  if (sbPreset === "basis") {
+    const idx = parseInt(sbBasis, 2);
+    comment.innerHTML = `Input was the basis state <span class="mono">|${sbBasis}⟩</span>. Output: every magnitude is exactly <span class="mono">1/√${1 << sbN} ≈ ${(1/Math.sqrt(1 << sbN)).toFixed(3)}</span>. The phases encode <span class="mono">x = ${idx}</span>: amplitude on <span class="mono">|y⟩</span> has phase <span class="mono">2π · x · y / N</span>.`;
+  } else if (sbPreset === "uniform") {
+    comment.innerHTML = `Input was a uniform superposition. Output: a single peak at <span class="mono">|0…0⟩</span>. The QFT inverts uniform-vs-delta — uniform inputs become delta outputs, and vice versa.`;
+  } else if (sbPreset === "period2") {
+    comment.innerHTML = `Input was periodic with period 2. Output peaks appear at frequencies that are multiples of <span class="mono">N/2</span>. The period of the input shows up directly as the spacing of peaks in the spectrum.`;
+  } else if (sbPreset === "period4") {
+    comment.innerHTML = `Input was periodic with period 4. Output peaks at multiples of <span class="mono">N/4</span>. This is exactly the structure that Shor's algorithm exploits — modular exponentiation has a hidden period, and the QFT exposes it.`;
+  }
+
+  document.getElementById("sb-result").style.display = "block";
+}
+
+sbNSlider.addEventListener("input", e => {
+  sbN = parseInt(e.target.value);
+  syncSandboxUI();
+});
+document.querySelectorAll("#sb-preset button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#sb-preset button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    sbPreset = btn.dataset.p;
+    syncSandboxUI();
+  });
+});
+sbSInput.addEventListener("input", e => {
+  const v = e.target.value.replace(/[^01]/g, "").slice(0, sbN);
+  sbBasis = v;
+  e.target.value = v;
+  if (v.length === sbN) runSandbox();
+});
+document.getElementById("sb-random").addEventListener("click", () => {
+  const N = 1 << sbN;
+  const idx = Math.floor(Math.random() * N);
+  sbBasis = pad(idx, sbN);
+  sbSInput.value = sbBasis;
+  // Make sure preset is "basis"
+  document.querySelectorAll("#sb-preset button").forEach(b => b.classList.remove("active"));
+  document.querySelector('#sb-preset button[data-p="basis"]').classList.add("active");
+  sbPreset = "basis";
+  syncSandboxUI();
+});
+document.getElementById("sb-run").addEventListener("click", runSandbox);
+
+syncSandboxUI();
+
+/* =========================================================
+   PROGRESS RAIL + REVEAL ON SCROLL
+   ========================================================= */
+(function observers() {
+  const sections = document.querySelectorAll("section[id]");
+  const railLinks = document.querySelectorAll(".rail a");
+  const sectionToLink = {};
+  railLinks.forEach(a => sectionToLink[a.getAttribute("href").slice(1)] = a);
+
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        railLinks.forEach(a => a.classList.remove("active"));
+        const link = sectionToLink[e.target.id];
+        if (link) link.classList.add("active");
+      }
+    });
+  }, { rootMargin: "-45% 0px -45% 0px" });
+  sections.forEach(s => io.observe(s));
+
+  // Reveal observer
+  const reveals = document.querySelectorAll(".reveal, h2, .lead, .promise-card, .game-board, .curse-chart, .super-demo, .player, .sandbox, .stat-row");
+  reveals.forEach(r => r.classList.add("reveal"));
+  const ro = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add("seen");
+        ro.unobserve(e.target);
+      }
+    });
+  }, { rootMargin: "0px 0px -10% 0px" });
+  reveals.forEach(r => ro.observe(r));
+})();
+
+</script>
+</body>
+</html>

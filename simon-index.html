@@ -1,0 +1,2501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Simon's Algorithm — A Hands-On Introduction</title>
+<meta name="description" content="The first exponential oracle speedup, and the template for Shor's factoring algorithm." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:ital,opsz,wght@0,6..72,200..800;1,6..72,200..800&display=swap" rel="stylesheet">
+<style>
+/* =========================================================
+   1. DESIGN TOKENS
+   ========================================================= */
+:root {
+  --bg:         #17130f;
+  --bg-soft:    #1f1a15;
+  --bg-lift:    #2a231c;
+  --ink:        #f1e6ce;
+  --ink-soft:   #c5b9a0;
+  --ink-dim:    #8a806d;
+  --line:       #3a3128;
+  --line-soft:  #2a231c;
+
+  --quantum:       #7bd3c8;
+  --quantum-dim:   #3d7a75;
+  --classical:     #e89a5a;
+  --classical-dim: #7a4f2a;
+  --spark:         #f5d547;
+  --alert:         #e0624b;
+
+  --font-display: "Instrument Serif", "Fraunces", Georgia, serif;
+  --font-body:    "Newsreader", "EB Garamond", Georgia, serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+
+  --measure:      68ch;
+  --radius-s:     4px;
+  --radius-m:     10px;
+  --radius-l:     20px;
+  --shadow-soft:  0 14px 40px -12px rgba(0,0,0,0.6);
+  --ease:         cubic-bezier(0.33, 1, 0.68, 1);
+  --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* =========================================================
+   2. RESET + BASE
+   ========================================================= */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 18px;
+  line-height: 1.65;
+  font-feature-settings: "liga", "kern";
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Warm subtle grain everywhere */
+body::before {
+  content: "";
+  position: fixed; inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  z-index: 1000;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+::selection { background: var(--spark); color: #000; }
+
+/* =========================================================
+   3. TYPOGRAPHY
+   ========================================================= */
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+}
+.display {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: clamp(3.2rem, 9vw, 7rem);
+  line-height: 0.98;
+  letter-spacing: -0.03em;
+}
+h2 {
+  font-size: clamp(2rem, 4.6vw, 3.4rem);
+  font-style: italic;
+  margin-bottom: 0.35em;
+}
+h2::before {
+  content: attr(data-act);
+  display: block;
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-size: 0.68rem;
+  letter-spacing: 0.3em;
+  color: var(--ink-dim);
+  margin-bottom: 1.4rem;
+  text-transform: uppercase;
+}
+h3 {
+  font-size: 1.6rem;
+  margin-bottom: 0.6em;
+}
+p {
+  margin-bottom: 1.1em;
+  max-width: var(--measure);
+}
+.lead {
+  font-size: clamp(1.15rem, 1.7vw, 1.35rem);
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+}
+em { font-style: italic; color: var(--spark); }
+strong { font-weight: 600; color: var(--ink); }
+code, .mono {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: var(--bg-soft);
+  padding: 0.08em 0.35em;
+  border-radius: var(--radius-s);
+  color: var(--quantum);
+  border: 1px solid var(--line-soft);
+}
+
+/* =========================================================
+   4. LAYOUT
+   ========================================================= */
+section {
+  padding: 9rem 1.5rem;
+  position: relative;
+}
+.container {
+  max-width: 1080px;
+  margin: 0 auto;
+}
+.narrow { max-width: 640px; margin: 0 auto; }
+
+.section-rule {
+  width: 80px; height: 1px;
+  background: var(--line);
+  margin: 0 0 2.5rem 0;
+}
+
+/* Progress rail on the side */
+.rail {
+  position: fixed; top: 50%; left: 1.2rem;
+  transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 0.8rem;
+  z-index: 100;
+  mix-blend-mode: difference;
+}
+.rail a {
+  display: block; width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(241,230,206,0.28);
+  transition: all 0.3s var(--ease);
+  position: relative;
+}
+.rail a.active { background: var(--spark); transform: scale(1.35); }
+.rail a:hover::after {
+  content: attr(data-label);
+  position: absolute; left: 20px; top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-mono); font-size: 0.7rem;
+  color: var(--ink); white-space: nowrap;
+  background: var(--bg-soft); padding: 4px 10px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--line);
+}
+@media (max-width: 820px) { .rail { display: none; } }
+
+/* =========================================================
+   5. HERO
+   ========================================================= */
+#hero {
+  min-height: 100vh;
+  display: flex; flex-direction: column; justify-content: center;
+  padding-top: 6rem; padding-bottom: 6rem;
+  position: relative;
+  overflow: hidden;
+}
+.hero-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.35em;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  margin-bottom: 2rem;
+}
+.hero-eyebrow .dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--quantum);
+  margin-right: 0.8rem;
+  vertical-align: middle;
+  animation: pulse 2.4s var(--ease) infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50%      { opacity: 1;   transform: scale(1.4); }
+}
+#hero .display span { color: var(--ink); }
+#hero .display .dash { color: var(--spark); font-style: normal; margin: 0 -0.15em; }
+.hero-sub {
+  margin-top: 1.8rem;
+  font-size: clamp(1.1rem, 1.6vw, 1.35rem);
+  max-width: 46ch;
+  color: var(--ink-soft);
+}
+.hero-meta {
+  margin-top: 3rem;
+  display: flex; gap: 2.2rem; flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.hero-meta b {
+  display: block;
+  color: var(--ink);
+  font-weight: 500;
+  font-size: 0.85rem;
+  margin-top: 0.2rem;
+}
+/* Animated bars behind hero title */
+.hero-bg {
+  position: absolute; inset: 0;
+  z-index: 0; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0.18;
+}
+.hero-bg svg { width: 90%; max-width: 900px; height: 260px; }
+#hero > * { position: relative; z-index: 1; }
+
+.scroll-cue {
+  margin-top: 5rem;
+  display: inline-flex; align-items: center; gap: 0.9rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.scroll-cue::before {
+  content: ""; width: 36px; height: 1px;
+  background: var(--ink-dim);
+  animation: cue 2s var(--ease) infinite;
+}
+@keyframes cue {
+  0%, 100% { transform: scaleX(1); opacity: 0.5; }
+  50%      { transform: scaleX(1.4); opacity: 1; }
+}
+
+/* =========================================================
+   6. PROMISE SECTION
+   ========================================================= */
+.promise-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-top: 3rem;
+}
+@media (max-width: 720px) { .promise-grid { grid-template-columns: 1fr; } }
+.promise-card {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 1.6rem 1.6rem 1.8rem;
+  position: relative;
+  overflow: hidden;
+}
+.promise-card .label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 1rem;
+}
+.promise-card h3 {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.8rem;
+  margin-bottom: 1.2rem;
+}
+.promise-card.constant h3  { color: var(--classical); }
+.promise-card.balanced h3  { color: var(--quantum); }
+
+.truth-table {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+.truth-table > div {
+  padding: 0.4em 0.9em;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex; align-items: center;
+}
+.truth-table > div:nth-last-child(-n+2) { border-bottom: none; }
+.truth-table .hx { background: var(--bg-lift); color: var(--ink-dim); }
+.truth-table .hy { background: var(--bg-lift); color: var(--ink-dim); font-weight: 500; }
+.truth-table .val { font-weight: 700; }
+.truth-table .val.zero { color: var(--ink-soft); }
+.truth-table .val.one  { color: var(--spark); }
+.truth-table .hx.pair { font-size: 0.86rem; }
+.truth-table .hx.pair .pair-sep { color: var(--ink-dim); margin: 0 0.3em; }
+
+.promise-card button {
+  margin-top: 1.2rem;
+  width: 100%;
+}
+
+/* =========================================================
+   7. CLASSICAL GAME
+   ========================================================= */
+.game-board {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 2rem;
+  margin-top: 2rem;
+}
+.game-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+.game-title {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.3rem;
+  color: var(--classical);
+}
+.query-counter {
+  display: flex; gap: 1.2rem; align-items: baseline;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.query-counter .n {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 2.4rem;
+  color: var(--spark);
+  line-height: 1;
+  font-feature-settings: "tnum";
+  letter-spacing: -0.02em;
+}
+.query-counter .slash {
+  color: var(--ink-dim);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.6rem;
+  margin: 0 -0.2em;
+}
+.query-counter .max {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.4rem;
+  color: var(--ink-soft);
+}
+
+.query-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.7rem;
+  margin-bottom: 1.8rem;
+}
+@media (max-width: 520px) { .query-grid { grid-template-columns: repeat(2, 1fr); } }
+.q-cell {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 1rem 0.6rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.25s var(--ease);
+  position: relative;
+  user-select: none;
+}
+.q-cell:hover:not(.queried):not(.locked) {
+  border-color: var(--classical);
+  background: var(--bg-lift);
+  transform: translateY(-1px);
+}
+.q-cell .x {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  display: block;
+  margin-bottom: 0.3rem;
+}
+.q-cell .result {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.8rem;
+  color: var(--ink-dim);
+  line-height: 1;
+  display: block;
+  min-height: 1.8rem;
+}
+.q-cell.queried .result.zero { color: var(--ink); }
+.q-cell.queried .result.one  { color: var(--spark); }
+.q-cell.queried  { background: var(--bg-lift); border-color: var(--classical-dim); }
+.q-cell.locked   { cursor: not-allowed; opacity: 0.6; }
+.q-cell .flash {
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  background: var(--spark);
+  opacity: 0;
+  pointer-events: none;
+}
+.q-cell.flash-on .flash { animation: flash 0.45s var(--ease-out); }
+@keyframes flash {
+  0%   { opacity: 0.5; }
+  100% { opacity: 0; }
+}
+
+.belief-bar {
+  height: 8px; width: 100%;
+  background: var(--bg-lift);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+  position: relative;
+}
+.belief-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--classical-dim), var(--classical), var(--spark));
+  transition: width 0.6s var(--ease-out);
+  width: 0%;
+}
+.belief-label {
+  display: flex; justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 0.5rem;
+}
+.belief-label b {
+  color: var(--ink-soft);
+  font-feature-settings: "tnum";
+}
+
+.commit-row {
+  display: flex; gap: 0.8rem; flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+.commit-row button { flex: 1; min-width: 160px; }
+
+.verdict {
+  margin-top: 1.5rem;
+  padding: 1.2rem 1.4rem;
+  border-radius: var(--radius-m);
+  border-left: 3px solid;
+  background: var(--bg);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: 1.5;
+  display: none;
+}
+.verdict.show { display: block; animation: fadeIn 0.4s var(--ease-out); }
+.verdict.win   { border-color: var(--quantum); }
+.verdict.lucky { border-color: var(--spark); }
+.verdict.wrong { border-color: var(--alert); }
+.verdict.info  { border-color: var(--classical); }
+.verdict b { color: var(--spark); }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* BV-specific: secret-so-far display */
+.secret-reveal {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 0.8rem;
+  padding: 1.8rem 1rem;
+  margin-bottom: 1.5rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
+.secret-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.secret-bits {
+  display: flex;
+  gap: 0.6rem;
+}
+.secret-bits .bit {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 54px; height: 66px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--bg-soft);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 2.6rem;
+  line-height: 1;
+  color: var(--ink-dim);
+  transition: all 0.5s var(--ease-out);
+}
+.secret-bits .bit.revealed.zero {
+  color: var(--ink);
+  border-color: var(--classical-dim);
+  background: var(--bg-lift);
+}
+.secret-bits .bit.revealed.one {
+  color: var(--spark);
+  border-color: var(--spark);
+  background: rgba(245,213,71,0.08);
+}
+.secret-bits .bit.just-revealed {
+  animation: reveal 0.8s var(--ease-out);
+}
+@keyframes reveal {
+  0%   { transform: scale(1.15); box-shadow: 0 0 0 0 rgba(245,213,71,0.4); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 20px rgba(245,213,71,0); }
+}
+.candidates-info {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  color: var(--ink-dim);
+  margin-top: 0.4rem;
+}
+.candidates-info #candidates-count {
+  color: var(--spark);
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+/* Query sections */
+.queries-section { margin-bottom: 1.2rem; }
+.queries-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 0.8rem;
+}
+.basis-queries {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.6rem;
+}
+@media (max-width: 520px) { .basis-queries { grid-template-columns: repeat(2, 1fr); } }
+.basis-queries .btn {
+  padding: 0.75em 0.5em;
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  font-family: var(--font-mono);
+}
+.basis-queries .btn.used {
+  opacity: 0.45;
+  pointer-events: none;
+  border-style: dashed;
+}
+.custom-query-row {
+  display: flex; gap: 0.6rem;
+}
+.custom-query-row .sb-text { flex: 1; }
+
+.query-log {
+  margin-top: 1.2rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  max-height: 180px;
+  overflow-y: auto;
+}
+.query-log ul {
+  list-style: none;
+  padding: 0.4rem 1.2rem 1rem;
+  margin: 0;
+}
+.query-log li {
+  padding: 0.4rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--line-soft);
+  display: flex; gap: 1rem; align-items: baseline;
+}
+.query-log li:last-child { border-bottom: none; }
+.query-log li .idx {
+  color: var(--ink-dim);
+  min-width: 2ch;
+}
+.query-log li .x { color: var(--ink); }
+.query-log li .arrow { color: var(--ink-dim); }
+.query-log li .f { color: var(--spark); font-weight: 700; }
+.query-log li .elim { color: var(--ink-dim); margin-left: auto; font-size: 0.72rem; }
+.query-log li .meaning { color: var(--ink-soft); }
+.query-log li .meaning sub { font-size: 0.75em; }
+
+/* Simon-specific: collision pairs highlighted in log */
+.query-log li.collision {
+  background: rgba(245,213,71,0.08);
+  border-left: 3px solid var(--spark);
+  padding-left: 0.8rem;
+  animation: flashCollision 0.6s var(--ease-out);
+}
+@keyframes flashCollision {
+  0%   { background: rgba(245,213,71,0.35); }
+  100% { background: rgba(245,213,71,0.08); }
+}
+.query-log li .fx { color: var(--spark); font-weight: 600; }
+.query-log li .note {
+  color: var(--ink-dim);
+  margin-left: auto;
+  font-size: 0.72rem;
+}
+.query-log li.collision .note { color: var(--spark); font-weight: 600; }
+
+/* Rules / How it works aside */
+.rules-box {
+  max-width: var(--measure);
+  margin: 2.5rem 0 2rem;
+  padding: 1.6rem 1.8rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--quantum);
+  border-radius: var(--radius-m);
+}
+.rules-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--quantum);
+  margin-bottom: 0.9rem;
+}
+.rules-box p {
+  font-size: 1rem;
+  line-height: 1.55;
+  margin-bottom: 0.8rem;
+  max-width: none;
+}
+.example-list {
+  list-style: none;
+  padding: 0.6rem 0;
+  margin: 0 0 0.8rem;
+  font-size: 0.95rem;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+.example-list li {
+  padding: 0.35rem 0;
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+}
+.example-list li .mono { background: transparent; border: none; padding: 0; color: var(--ink); }
+.example-list li strong { color: var(--spark); font-weight: 700; }
+.ex-result {
+  font-family: var(--font-mono);
+  color: var(--spark);
+  font-weight: 700;
+  background: rgba(245,213,71,0.08);
+  padding: 0.08em 0.4em;
+  border-radius: 3px;
+}
+
+/* Basis-query button with two lines */
+.basis-queries .btn {
+  display: flex; flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.7em 0.5em;
+}
+.basis-queries .btn .reveals {
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  color: var(--quantum);
+  font-weight: 400;
+  text-transform: none;
+}
+.basis-queries .btn.used .reveals { color: var(--ink-dim); }
+
+/* =========================================================
+   8. BUTTONS
+   ========================================================= */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.6rem;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 500;
+  padding: 0.85em 1.4em;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+  text-decoration: none;
+  line-height: 1;
+}
+.btn:hover { border-color: var(--ink); background: var(--bg-lift); }
+.btn.primary {
+  background: var(--spark);
+  color: #1a1509;
+  border-color: var(--spark);
+  font-weight: 700;
+}
+.btn.primary:hover {
+  background: #fbe064;
+  border-color: #fbe064;
+  transform: translateY(-1px);
+}
+.btn.ghost { color: var(--ink-soft); }
+.btn.quantum { border-color: var(--quantum); color: var(--quantum); }
+.btn.quantum:hover { background: var(--quantum); color: #0b1816; }
+.btn.classical { border-color: var(--classical); color: var(--classical); }
+.btn.classical:hover { background: var(--classical); color: #1a0f05; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* =========================================================
+   9. CURSE CHART
+   ========================================================= */
+.curse-chart {
+  margin-top: 3rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 2rem;
+  overflow-x: auto;
+}
+.curse-chart svg { width: 100%; height: auto; min-width: 420px; }
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-top: 2rem;
+}
+@media (max-width: 620px) { .stat-row { grid-template-columns: 1fr; } }
+.stat {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 1.2rem 1.4rem;
+}
+.stat .k {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 0.3rem;
+}
+.stat .v {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 2rem;
+  color: var(--spark);
+  line-height: 1;
+}
+.stat .v small { color: var(--ink-soft); font-size: 0.6em; }
+
+/* =========================================================
+   10. QUANTUM INTRO — SUPERPOSITION
+   ========================================================= */
+.super-demo {
+  margin-top: 2.5rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 2rem;
+  text-align: center;
+}
+.super-demo .bar-row {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 14px;
+  height: 220px;
+  margin: 1.5rem 0;
+}
+.super-bar {
+  flex: 0 0 auto;
+  width: 46px;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  position: relative;
+}
+.super-bar .fill {
+  width: 100%;
+  background: var(--quantum);
+  transition: height 0.8s var(--ease-out), background 0.4s var(--ease);
+  border-radius: 2px 2px 0 0;
+}
+.super-bar .lbl {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--ink-dim);
+  margin-top: 0.6rem;
+}
+.super-demo .explanation {
+  color: var(--ink-soft);
+  font-style: italic;
+  font-size: 1.05rem;
+  min-height: 3.2em;
+  max-width: 54ch;
+  margin: 1rem auto 0;
+}
+
+/* =========================================================
+   11. ALGORITHM PLAYER
+   ========================================================= */
+.player {
+  margin-top: 2rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  overflow: hidden;
+}
+.player-header {
+  padding: 1.3rem 1.8rem;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.step-label {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.5rem;
+  color: var(--ink);
+}
+.step-label .count {
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  color: var(--ink-dim);
+  margin-right: 0.8rem;
+  text-transform: uppercase;
+}
+
+.player-body {
+  padding: 2rem 1.5rem;
+}
+
+/* Circuit diagram */
+.circuit-container {
+  overflow-x: auto;
+  padding: 0.5rem 0;
+  margin-bottom: 1.5rem;
+}
+.circuit-svg {
+  display: block;
+  margin: 0 auto;
+}
+
+/* Amplitude bars visualization */
+.amp-viz {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px dashed var(--line);
+}
+.amp-viz h4 {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 1.2rem;
+  font-weight: 400;
+}
+.amp-bar-row {
+  position: relative;
+  height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 0.5rem;
+}
+.amp-bar-row::before {
+  content: "";
+  position: absolute; left: 0; right: 0; top: 50%;
+  height: 1px;
+  background: var(--line);
+  z-index: 0;
+}
+.amp-bar {
+  flex: 0 1 52px;
+  min-width: 24px;
+  height: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+.amp-bar .fill {
+  position: absolute;
+  left: 4px; right: 4px;
+  top: 50%;
+  background: var(--quantum);
+  height: 0;
+  transition: top 0.7s var(--ease-out), height 0.7s var(--ease-out), background 0.4s var(--ease);
+  border-radius: 2px;
+}
+.amp-bar .fill.negative { background: var(--alert); }
+
+/* Probability mode: bars go from bottom up, using full height */
+.amp-bar-row.prob-mode::before { display: none; }
+.amp-bar-row.prob-mode .amp-bar .fill {
+  top: auto;
+  bottom: 0;
+  background: var(--quantum);
+}
+.amp-bar .lbl {
+  position: absolute;
+  bottom: -1.8rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+.amp-bar .val {
+  position: absolute;
+  top: -1.3rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--ink-soft);
+  opacity: 0;
+  transition: opacity 0.3s var(--ease);
+  white-space: nowrap;
+}
+.amp-bar:hover .val { opacity: 1; }
+
+.amp-legend {
+  display: flex; gap: 1.8rem; justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-top: 2.8rem;
+}
+.amp-legend .chip {
+  display: inline-block; width: 10px; height: 10px;
+  border-radius: 2px;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+}
+.amp-legend .chip.pos { background: var(--quantum); }
+.amp-legend .chip.neg { background: var(--alert); }
+
+/* Commentary box */
+.commentary {
+  margin-top: 2rem;
+  padding: 1.2rem 1.4rem;
+  border-left: 3px solid var(--quantum);
+  background: var(--bg);
+  border-radius: 0 var(--radius-s) var(--radius-s) 0;
+  font-style: italic;
+  color: var(--ink-soft);
+  min-height: 3.4em;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+/* Player controls */
+.player-controls {
+  display: flex;
+  gap: 0.7rem;
+  align-items: center;
+  justify-content: center;
+  padding: 1.2rem 1.5rem;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+  flex-wrap: wrap;
+}
+.player-controls .spacer { flex: 1; }
+.step-dots {
+  display: flex; gap: 6px;
+  align-items: center;
+}
+.step-dots .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--line);
+  transition: all 0.3s var(--ease);
+}
+.step-dots .dot.active { background: var(--spark); transform: scale(1.3); }
+.step-dots .dot.done   { background: var(--quantum); }
+
+/* Oracle picker */
+.oracle-picker {
+  display: flex; gap: 0.6rem; align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  flex-wrap: wrap;
+}
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+.seg button {
+  background: transparent;
+  border: none;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  padding: 0.6em 0.9em;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: all 0.2s;
+  border-right: 1px solid var(--line);
+}
+.seg button:last-child { border-right: none; }
+.seg button.active {
+  background: var(--spark);
+  color: #1a1509;
+  font-weight: 700;
+}
+.seg button:hover:not(.active) { background: var(--bg-lift); color: var(--ink); }
+
+/* =========================================================
+   12. SANDBOX
+   ========================================================= */
+.sandbox {
+  margin-top: 2rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 2rem;
+}
+.sb-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.3rem 2rem;
+  padding-bottom: 1.8rem;
+  margin-bottom: 1.8rem;
+  border-bottom: 1px solid var(--line);
+}
+@media (max-width: 640px) { .sb-controls { grid-template-columns: 1fr; } }
+.ctrl {
+  display: flex; flex-direction: column; gap: 0.55rem;
+}
+.ctrl label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.ctrl .value {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.5rem;
+  color: var(--spark);
+  line-height: 1;
+}
+.slider {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 4px;
+  background: var(--line);
+  border-radius: 999px;
+  outline: none;
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px; height: 18px;
+  background: var(--spark);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.slider::-webkit-slider-thumb:hover { transform: scale(1.18); }
+.slider::-moz-range-thumb {
+  width: 18px; height: 18px;
+  background: var(--spark);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.sb-text {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 0.7em 0.9em;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.sb-text:focus { border-color: var(--spark); }
+
+.sb-result {
+  margin-top: 2rem;
+  padding: 1.4rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
+.sb-result .step-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 1rem; flex-wrap: wrap;
+  margin-bottom: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.sb-result .final-answer {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.8rem;
+}
+.sb-result .final-answer.constant { color: var(--classical); }
+.sb-result .final-answer.balanced { color: var(--quantum); }
+.sb-result .final-answer.solved   { color: var(--spark); }
+
+/* Simon shots table */
+.shot-table {
+  display: grid;
+  grid-template-columns: auto auto auto 1fr;
+  gap: 0;
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+.shot-table > div {
+  padding: 0.55rem 1rem;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex; align-items: center;
+}
+.shot-table > div:nth-last-child(-n+4) { border-bottom: none; }
+.shot-table .sh { background: var(--bg-lift); color: var(--ink-dim); font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase; }
+.shot-table .sh-idx { color: var(--ink-dim); }
+.shot-table .sh-y   { color: var(--ink); font-weight: 500; }
+.shot-table .sh-eq  { color: var(--ink-soft); }
+.shot-table .sh-note { color: var(--ink-dim); font-size: 0.78rem; }
+.shot-table .row-useful .sh-note { color: var(--quantum); }
+.shot-table .row-redundant .sh-note { color: var(--ink-dim); }
+.shot-table .row-zero .sh-note { color: var(--classical); }
+
+.shot-table .row-useful .sh-y { color: var(--quantum); }
+
+/* =========================================================
+   13. OUTRO
+   ========================================================= */
+#outro {
+  background: var(--bg-soft);
+  border-top: 1px solid var(--line);
+  margin-top: 4rem;
+}
+.series-list {
+  margin-top: 2rem;
+  list-style: none;
+  padding: 0;
+}
+.series-list li {
+  padding: 1.1rem 0;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 1.5rem;
+}
+.series-list li:last-child { border-bottom: none; }
+.series-list .num {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+  color: var(--ink-dim);
+  min-width: 3ch;
+}
+.series-list .name {
+  flex: 1;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.4rem;
+  color: var(--ink);
+}
+.series-list .name .done {
+  color: var(--quantum);
+  margin-left: 0.5rem;
+  font-style: normal;
+  font-size: 0.8em;
+}
+.series-list .name .here {
+  color: var(--spark);
+  margin-left: 0.5rem;
+  font-style: normal;
+  font-size: 0.75em;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+}
+.series-list .status {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+}
+
+footer {
+  padding: 3rem 1.5rem 4rem;
+  text-align: center;
+  border-top: 1px solid var(--line);
+  color: var(--ink-dim);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+}
+footer a { color: var(--ink-soft); text-decoration: none; border-bottom: 1px solid var(--line); }
+footer a:hover { color: var(--spark); border-color: var(--spark); }
+
+/* =========================================================
+   14. REVEALS
+   ========================================================= */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.9s var(--ease-out), transform 0.9s var(--ease-out);
+}
+.reveal.seen { opacity: 1; transform: translateY(0); }
+
+/* =========================================================
+   15. RESPONSIVE
+   ========================================================= */
+@media (max-width: 540px) {
+  section { padding: 6rem 1rem; }
+  body    { font-size: 16px; }
+  .game-board, .player, .sandbox { padding: 1.3rem; }
+  .player-body { padding: 1.2rem 0.6rem; }
+  .amp-bar-row { gap: 6px; height: 180px; }
+  .amp-bar .lbl { font-size: 0.58rem; }
+  .circuit-container { margin: 0 -0.6rem; padding: 0 0.6rem; }
+}
+</style>
+</head>
+<body>
+
+<nav class="rail" aria-label="Section progress">
+  <a href="#hero"      data-label="Start"></a>
+  <a href="#promise"   data-label="The promise"></a>
+  <a href="#classical" data-label="Classical"></a>
+  <a href="#curse"     data-label="Scaling"></a>
+  <a href="#quantum"   data-label="Quantum idea"></a>
+  <a href="#algorithm" data-label="Algorithm"></a>
+  <a href="#sandbox"   data-label="Sandbox"></a>
+  <a href="#outro"     data-label="What's next"></a>
+</nav>
+
+<!-- ===================================================
+     SECTION 1: HERO
+     =================================================== -->
+<section id="hero">
+  <div class="hero-bg"><svg id="hero-bars" viewBox="0 0 900 260" preserveAspectRatio="none" aria-hidden="true"></svg></div>
+  <div class="container">
+    <div class="hero-eyebrow"><span class="dot"></span>A hands-on introduction · Quantum algorithms series · №03</div>
+    <h1 class="display">
+      <span>Simon's&nbsp;Algorithm</span>
+    </h1>
+    <p class="hero-sub">A hidden period, revealed exponentially faster than any classical attack — the scaffolding on which Shor's factoring was built.</p>
+    <div class="hero-meta">
+      <div>Reading time<b>~ 15 minutes</b></div>
+      <div>Prerequisites<b>Bernstein–Vazirani helps</b></div>
+      <div>Runs on<b>Your browser</b></div>
+    </div>
+    <div class="scroll-cue">Scroll</div>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 2: THE SETUP
+     =================================================== -->
+<section id="promise">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act I">A function that echoes.</h2>
+    <p class="lead narrow">A new kind of box. This one takes <span class="mono">n</span> bits in and returns <span class="mono">n</span> bits out. The only promise: the function <span class="mono">f</span> is <strong>two-to-one</strong>, and the two inputs that map to each output always differ by the <em>same</em> hidden bit-string <span class="mono">s</span>. Formally, <span class="mono">f(x) = f(x ⊕ s)</span> for every <span class="mono">x</span>, and that's the only collision.</p>
+
+    <div class="promise-grid">
+      <article class="promise-card constant">
+        <div class="label">What is s</div>
+        <h3>The hidden period.</h3>
+        <p>A fixed, unknown, non-zero bit-string of length <span class="mono">n</span>. Here's an example.</p>
+        <div class="truth-table" id="tt-constant"></div>
+      </article>
+      <article class="promise-card balanced">
+        <div class="label">What you'll see</div>
+        <h3>The pairing.</h3>
+        <p>Every output value is produced by exactly two inputs — a pair <span class="mono">(x, x⊕s)</span>. Four outputs for <span class="mono">n=3</span>, each one hit twice.</p>
+        <div class="truth-table" id="tt-balanced"></div>
+        <button class="btn ghost" id="shuffle-balanced" style="margin-top:1.2rem">New period ↻</button>
+      </article>
+    </div>
+
+    <p class="narrow" style="margin-top:3rem"><em>The question is simple.</em> Given this kind of box, can you find the period <span class="mono">s</span>? And if so — how many queries do you need?</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 3: CLASSICAL GAME — collision hunting
+     =================================================== -->
+<section id="classical">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act II">Hunt for a collision.</h2>
+    <p class="lead narrow">Below is a box with a <strong>4-bit</strong> hidden period <span class="mono">s</span>. If you ever query two different inputs <span class="mono">x₁</span> and <span class="mono">x₂</span> with <span class="mono">f(x₁) = f(x₂)</span>, you've found a collision — and the period is just their XOR: <span class="mono">s = x₁ ⊕ x₂</span>. Your job is to stumble onto one.</p>
+
+    <aside class="rules-box">
+      <div class="rules-label">How the box works</div>
+      <p>The function is 2-to-1 with hidden period <span class="mono">s</span>. Out of 16 possible inputs, only 8 distinct output values exist — each output value appears exactly twice, once for some <span class="mono">x</span> and once for <span class="mono">x ⊕ s</span>.</p>
+      <p style="margin-bottom:0"><strong>Classical strategy:</strong> query random inputs until two of them return the same output. The more queries you make, the more likely a collision becomes — this is the birthday paradox. For <span class="mono">n = 4</span> you'll typically find one in 4–6 queries. For <span class="mono">n = 100</span>: around <span class="mono">2⁵⁰</span> queries. That's the problem.</p>
+    </aside>
+
+    <div class="game-board">
+      <div class="game-header">
+        <div class="game-title">The mystery box</div>
+        <div class="query-counter">
+          <span>Queries</span>
+          <span class="n" id="q-count">0</span>
+        </div>
+      </div>
+
+      <!-- Discovered period display -->
+      <div class="secret-reveal">
+        <div class="secret-label">Period discovered</div>
+        <div class="secret-bits" id="period-bits"></div>
+        <div class="candidates-info" id="collision-info">no collision yet</div>
+      </div>
+
+      <!-- Query controls -->
+      <div class="queries-section">
+        <div class="queries-label">Make a query</div>
+        <div class="custom-query-row">
+          <input type="text" class="sb-text" id="custom-query" placeholder="e.g. 1010" maxlength="4" />
+          <button class="btn" id="custom-ask">Ask</button>
+          <button class="btn" id="random-ask">Ask a random x</button>
+        </div>
+      </div>
+
+      <!-- Log -->
+      <div class="query-log" id="query-log" style="display:none">
+        <div class="queries-label" style="padding:0 1.2rem; padding-top:1rem">Query history — collisions highlighted</div>
+        <ul id="query-log-list"></ul>
+      </div>
+
+      <div style="margin-top:1.5rem; display:flex; gap:0.6rem; flex-wrap:wrap">
+        <button class="btn ghost" id="reset-game">New period ↻</button>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+    </div>
+
+    <p class="narrow" style="margin-top:3rem">A handful of queries was enough at <span class="mono">n = 4</span>. But this approach is fundamentally limited — the expected number of queries grows as <strong>√2ⁿ</strong>. Double the bits and you quadruple the work. The quantum algorithm, as you'll see, only needs about <em>n</em>.</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 4: THE COST
+     =================================================== -->
+<section id="curse">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act III">The birthday cost.</h2>
+    <p class="lead narrow">For an <span class="mono">n</span>-bit period, the best any classical algorithm can do is about <strong>√2ⁿ</strong> queries on average — the birthday paradox in action. Simon's quantum algorithm needs only <strong>about n</strong> queries. For the first time in this series, the gap is a <em>provable</em> exponential advantage over <em>every</em> classical algorithm — deterministic or randomized.</p>
+
+    <div class="curse-chart"><svg viewBox="0 0 760 360" id="curse-svg" aria-label="Classical query count grows as sqrt of 2 to the n, quantum stays linear"></svg></div>
+
+    <div class="stat-row">
+      <div class="stat"><div class="k">n = 20</div><div class="v">~ 1,024 <small>classical · 20 quantum</small></div></div>
+      <div class="stat"><div class="k">n = 40</div><div class="v">~ 10⁶ <small>classical · 40 quantum</small></div></div>
+      <div class="stat"><div class="k">n = 60</div><div class="v">~ 10⁹ <small>classical · 60 quantum</small></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 5: QUANTUM IDEA
+     =================================================== -->
+<section id="quantum">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act IV">Superposition, but now with partners.</h2>
+    <p class="lead narrow">Simon's algorithm uses the same building blocks as Deutsch–Jozsa and Bernstein–Vazirani — uniform superposition, oracle call, interference — but with one new twist: <em>the output register is entangled with the input register</em>. That entanglement conspires with the final Hadamards to reveal something unexpected: not the period itself, but a random string perpendicular to it.</p>
+
+    <p class="narrow">To refresh the picture: one Hadamard gate on each of three qubits turns <span class="mono">|000⟩</span> into a uniform superposition of all <span class="mono">8</span> three-bit strings. Every possible input, at once — ready to be fed to the oracle.</p>
+
+    <div class="super-demo">
+      <div class="bar-row" id="super-bars"></div>
+      <div class="explanation" id="super-text">The register starts in the state <span class="mono">|000⟩</span>. One amplitude is 1, the rest are 0.</div>
+      <div style="margin-top:1.4rem; display:flex; gap:0.7rem; justify-content:center; flex-wrap:wrap">
+        <button class="btn quantum" id="super-hadamard">Apply H⊗³</button>
+        <button class="btn ghost"    id="super-reset">Reset</button>
+      </div>
+    </div>
+
+    <p class="narrow" style="margin-top:3rem">What happens next is the crux. After the oracle marks each input with its <span class="mono">f</span>-value, the second layer of Hadamards creates a strange interference pattern: the only input states with non-zero amplitude are those <span class="mono">y</span> for which <strong>s · y = 0 (mod 2)</strong>. Every measurement gives one such <span class="mono">y</span>. Collect <span class="mono">n − 1</span> independent ones and a dash of linear algebra recovers <span class="mono">s</span>.</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 6: ALGORITHM
+     =================================================== -->
+<section id="algorithm">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act V">One run of the algorithm.</h2>
+    <p class="lead narrow">The Simon circuit for <span class="mono">n = 3</span> input qubits (plus 3 output qubits for the oracle). Step through it. Watch the probability distribution over the input register — it starts peaked at <span class="mono">|000⟩</span>, spreads uniformly, then collapses onto the strings <span class="mono">y</span> with <span class="mono">s · y = 0</span>.</p>
+
+    <div class="oracle-picker" style="margin-top:1.8rem; margin-bottom:1rem">
+      <span>Pick a period:</span>
+      <div class="seg" id="seg-oracle">
+        <button data-s="001">s = 001</button>
+        <button data-s="010">s = 010</button>
+        <button data-s="011" class="active">s = 011</button>
+        <button data-s="101">s = 101</button>
+        <button data-s="110">s = 110</button>
+        <button data-s="111">s = 111</button>
+      </div>
+    </div>
+
+    <div class="player">
+      <div class="player-header">
+        <div class="step-label"><span class="count" id="step-count">Step 0 / 4</span><span id="step-name">Initial state</span></div>
+        <div class="step-dots" id="step-dots"></div>
+      </div>
+
+      <div class="player-body">
+        <div class="circuit-container">
+          <svg class="circuit-svg" id="circuit-svg" viewBox="0 0 720 320" aria-label="Simon circuit diagram"></svg>
+        </div>
+
+        <div class="amp-viz">
+          <h4>Input register — probabilities</h4>
+          <div class="amp-bar-row prob-mode" id="amp-bars"></div>
+          <div class="amp-legend">
+            <span><span class="chip pos"></span>Probability of measuring <span class="mono">|y⟩</span></span>
+          </div>
+        </div>
+
+        <div class="commentary" id="commentary">Everything starts quiet. Input register in <span class="mono">|000⟩</span>, output register in <span class="mono">|000⟩</span>.</div>
+      </div>
+
+      <div class="player-controls">
+        <button class="btn" id="player-prev">← Prev</button>
+        <button class="btn primary" id="player-play">▶ Play</button>
+        <button class="btn" id="player-next">Next →</button>
+        <div class="spacer"></div>
+        <button class="btn ghost" id="player-reset">Restart</button>
+      </div>
+    </div>
+
+    <p class="narrow" style="margin-top:3rem">Each run gives one <span class="mono">y</span> satisfying <span class="mono">s · y = 0</span>. One run isn't enough to recover <span class="mono">s</span> — each <span class="mono">y</span> is a linear constraint, and you need <span class="mono">n − 1</span> independent ones to pin the period down. That's where the next section comes in.</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 7: FREE PLAY — multi-shot + linear algebra
+     =================================================== -->
+<section id="sandbox">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act VI">Putting it together.</h2>
+    <p class="lead narrow">One run of the quantum algorithm gives one constraint <span class="mono">s · y = 0</span>. That's a single linear equation in <span class="mono">n</span> unknowns over the field of two elements. To pin down a non-zero <span class="mono">s</span> you need <strong>n − 1</strong> independent equations. Run the algorithm here, collect <span class="mono">y</span>'s, watch the system of equations build up, and recover the period.</p>
+
+    <div class="sandbox">
+      <div class="sb-controls">
+        <div class="ctrl">
+          <label>Number of input qubits · <span class="value" id="sb-n-val">3</span></label>
+          <input type="range" class="slider" id="sb-n" min="2" max="5" value="3" step="1" />
+        </div>
+        <div class="ctrl">
+          <label>Hidden period s</label>
+          <input type="text" class="sb-text" id="sb-s" value="011" />
+        </div>
+      </div>
+
+      <div style="display:flex; gap:0.8rem; align-items:center; flex-wrap:wrap">
+        <button class="btn primary" id="sb-run">▶ Run once</button>
+        <button class="btn quantum" id="sb-autorun">Auto-run until solved</button>
+        <button class="btn ghost" id="sb-reset">Reset shots</button>
+        <button class="btn ghost" id="sb-random">Random period ↻</button>
+      </div>
+
+      <div class="sb-result" id="sb-result" style="display:none; margin-top:2rem">
+        <div class="step-head">
+          <span>Shots collected — solving s · y = 0</span>
+          <span id="sb-verdict" class="final-answer">—</span>
+        </div>
+        <div class="shot-table" id="shot-table"></div>
+        <p style="color:var(--ink-soft); margin-top:1.4rem; font-size:0.95rem" id="sb-comment">—</p>
+      </div>
+    </div>
+
+    <p class="narrow" style="margin-top:3rem">Some shots are useless — a <span class="mono">y</span> that's already in the span of previous ones adds no new information, and the zero string <span class="mono">y = 00…0</span> is trivially orthogonal to everything. On average you'll need about <span class="mono">n + 3</span> shots to gather <span class="mono">n − 1</span> independent ones. Still exponentially better than classical.</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 8: OUTRO
+     =================================================== -->
+<section id="outro">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Coda">The template for Shor.</h2>
+    <p class="narrow">Simon's algorithm is the first in this series that gives an <em>exponential</em> oracle speedup over any classical algorithm, deterministic or randomized. But it's more than a curiosity: it is the conceptual ancestor of Peter Shor's factoring algorithm. Replace "hidden period of a function on bit-strings" with "hidden period of modular exponentiation," replace Hadamards with the quantum Fourier transform, and you have Shor.</p>
+
+    <p class="narrow">The lesson that carries forward: when a problem has a hidden algebraic structure — a period, a symmetry, a subgroup — quantum computers can expose it in polynomial time, even when classical computers cannot. This is the real engine of quantum advantage.</p>
+
+    <h3 style="margin-top:3.5rem; font-style:italic">The series so far.</h3>
+    <ul class="series-list">
+      <li><span class="num">01</span><span class="name">Deutsch–Jozsa <span class="done">✓</span></span><span class="status">Published</span></li>
+      <li><span class="num">02</span><span class="name">Bernstein–Vazirani <span class="done">✓</span></span><span class="status">Published</span></li>
+      <li><span class="num">03</span><span class="name">Simon's algorithm <span class="here">you are here</span></span><span class="status">Published</span></li>
+      <li><span class="num">04</span><span class="name">Grover's search</span><span class="status">Next</span></li>
+      <li><span class="num">05</span><span class="name">Quantum Phase Estimation</span><span class="status">Planned</span></li>
+      <li><span class="num">06</span><span class="name">Shor's factoring</span><span class="status">Planned</span></li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  Built as an open invitation to play. Source on <a href="#" id="gh-link">GitHub</a>.
+  No cookies. No tracking. Your browser does all the quantum math.
+</footer>
+
+<script>
+"use strict";
+
+/* =========================================================
+   SIMULATOR — real quantum state on 2^(n+1) amplitudes
+   DJ is an algorithm where all amplitudes stay real, so we
+   use plain Float64Array.
+   ========================================================= */
+const INV_SQRT2 = 1 / Math.sqrt(2);
+
+function newState(numQubits) {
+  const dim = 1 << numQubits;
+  const amp = new Float64Array(dim);
+  amp[0] = 1;
+  return { numQubits, dim, amp };
+}
+function cloneState(s) {
+  return { numQubits: s.numQubits, dim: s.dim, amp: new Float64Array(s.amp) };
+}
+function applyX(s, q) {
+  const a = s.amp, mask = 1 << q;
+  for (let i = 0; i < s.dim; i++) {
+    if ((i & mask) === 0) {
+      const j = i | mask;
+      const t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+  }
+}
+function applyH(s, q) {
+  const a = s.amp, mask = 1 << q;
+  for (let i = 0; i < s.dim; i++) {
+    if ((i & mask) === 0) {
+      const j = i | mask;
+      const ai = a[i], aj = a[j];
+      a[i] = (ai + aj) * INV_SQRT2;
+      a[j] = (ai - aj) * INV_SQRT2;
+    }
+  }
+}
+function applyCNOT(s, ctrl, tgt) {
+  const a = s.amp, cMask = 1 << ctrl, tMask = 1 << tgt;
+  for (let i = 0; i < s.dim; i++) {
+    if ((i & cMask) && !(i & tMask)) {
+      const j = i | tMask;
+      const t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+  }
+}
+
+/* Project total state onto |-> on the output qubit (index nInputs).
+   Returns signed real amplitudes for the input register only.
+   Valid after the output qubit has been put in |-> and left alone;
+   that's exactly the case throughout DJ. */
+function inputAmplitudesMinus(s, nInputs) {
+  const out = new Float64Array(1 << nInputs);
+  const outMask = 1 << nInputs;
+  for (let x = 0; x < out.length; x++) {
+    out[x] = (s.amp[x] - s.amp[x | outMask]) * INV_SQRT2;
+  }
+  return out;
+}
+
+/* Oracle builders return arrays of gate ops: ["H", q], ["X", q], ["CNOT", c, t] */
+function constantOracleGates(n, value) {
+  return value === 1 ? [["X", n]] : [];
+}
+function balancedOracleGates(n, b) {
+  // f(x) = b . x  (mod 2)  — implemented as one CNOT per bit where b_i = 1.
+  // This is balanced iff b != 0...0. The measurement outcome of the DJ
+  // algorithm on this oracle is exactly the string b, which makes the
+  // quantum trick visceral: you literally "see" the oracle's signature.
+  const gates = [];
+  for (let i = 0; i < n; i++) {
+    if (b[n - 1 - i] === "1") gates.push(["CNOT", i, n]);
+  }
+  return gates;
+}
+/* Simon's oracle: f is 2-to-1 with hidden period s.
+   Input qubits 0..n-1, output qubits n..2n-1.
+   Construction:
+     1. CNOT input_i -> output_i for each i  (copies x into output).
+     2. Let k be the highest bit with s_k = 1.
+     3. For each j where s_j = 1, CNOT input_k -> output_j.
+   f(x) = x if x_k = 0, else f(x) = x XOR s. Satisfies f(x) = f(x XOR s). */
+function simonOracleGates(n, s) {
+  const gates = [];
+  for (let i = 0; i < n; i++) gates.push(["CNOT", i, n + i]);
+  let k = -1;
+  for (let i = n - 1; i >= 0; i--) {
+    if (s[n - 1 - i] === "1") { k = i; break; }
+  }
+  if (k === -1) return gates;
+  for (let j = 0; j < n; j++) {
+    if (s[n - 1 - j] === "1") gates.push(["CNOT", k, n + j]);
+  }
+  return gates;
+}
+
+/* Marginal probability distribution on the input register,
+   tracing over output. */
+function inputRegisterProbs(state, nInput) {
+  const size = 1 << nInput;
+  const mask = size - 1;
+  const probs = new Float64Array(size);
+  for (let idx = 0; idx < state.dim; idx++) {
+    const x = idx & mask;
+    probs[x] += state.amp[idx] * state.amp[idx];
+  }
+  return probs;
+}
+
+function applyGate(s, g) {
+  if (g[0] === "X")     applyX(s, g[1]);
+  else if (g[0] === "H") applyH(s, g[1]);
+  else if (g[0] === "CNOT") applyCNOT(s, g[1], g[2]);
+}
+
+/* Build the sequence of "scenes" for the algorithm player.
+   Simon's algorithm has 2n qubits: n input (0..n-1) + n output (n..2n-1).
+   Scene[i].values holds the input-register probability distribution to display. */
+function buildScenes(n, secret) {
+  const oracleGates = simonOracleGates(n, secret);
+  const state = newState(2 * n);
+  const scenes = [];
+  const size = 1 << n;
+
+  function probs() { return inputRegisterProbs(state, n); }
+
+  scenes.push({
+    label: "Initial state",
+    commentary: `Everything starts quiet. Input register in |${"0".repeat(n)}⟩, output register in |${"0".repeat(n)}⟩. The period is <span class="mono">s = ${secret}</span> — baked into the oracle, still hidden.`,
+    highlight: -1,
+    values: probs(),
+  });
+
+  for (let q = 0; q < n; q++) applyH(state, q);
+  scenes.push({
+    label: "Hadamards — uniform superposition",
+    commentary: `One Hadamard on every input qubit. The input register is now a uniform superposition of all ${size} basis states. The output register is still |${"0".repeat(n)}⟩, waiting.`,
+    highlight: 0,
+    values: probs(),
+  });
+
+  for (const g of oracleGates) applyGate(state, g);
+  scenes.push({
+    label: "Oracle — entanglement",
+    commentary: `The oracle has computed <span class="mono">f(x)</span> for every <span class="mono">x</span> at once, writing the result into the output register. The input probability distribution <em>looks</em> unchanged, but every input is now entangled with its f-value — and pairs <span class="mono">(x, x⊕s)</span> share the same output. That hidden pairing is what the next step will exploit.`,
+    highlight: 1,
+    values: probs(),
+  });
+
+  for (let q = 0; q < n; q++) applyH(state, q);
+  const finalProbs = probs();
+  scenes.push({
+    label: "Hadamards again — interference",
+    commentary: `A second layer of Hadamards on the input register. The entanglement with the output, plus the coset pairing, produces a textbook interference pattern: amplitudes survive only on those <span class="mono">y</span> for which <span class="mono">s · y = 0</span>. For <span class="mono">s = ${secret}</span>, that leaves ${countValidY(finalProbs)} values, each with probability <span class="mono">1 / ${1 << (n - 1)}</span>.`,
+    highlight: 2,
+    values: finalProbs,
+  });
+
+  // Collapsed outcome: deterministic smallest non-zero y with s·y = 0 for display.
+  const collapsed = new Float64Array(size);
+  const sampled = smallestNonTrivialY(secret, n);
+  collapsed[sampled] = 1;
+  scenes.push({
+    label: "Measure",
+    commentary: `A single measurement draws one value from the distribution above. In a real run, any of the ${countValidY(finalProbs)} valid <span class="mono">y</span>'s could appear, each equally likely. Here we've sampled <span class="mono">y = ${pad(sampled, n)}</span> for concreteness. That's <em>one</em> linear equation <span class="mono">s · y = 0</span>. You'll need <span class="mono">n − 1 = ${n - 1}</span> independent ones to recover <span class="mono">s</span>.`,
+    highlight: 3,
+    values: collapsed,
+    isFinal: true,
+  });
+
+  return { scenes, secret, n };
+}
+
+function countValidY(probs) {
+  let c = 0;
+  for (let i = 0; i < probs.length; i++) if (probs[i] > 1e-9) c++;
+  return c;
+}
+
+function smallestNonTrivialY(secret, n) {
+  // Smallest non-zero y with s·y = 0.
+  for (let y = 1; y < (1 << n); y++) {
+    let dot = 0;
+    for (let i = 0; i < n; i++) {
+      if (secret[n - 1 - i] === "1" && ((y >> i) & 1)) dot ^= 1;
+    }
+    if (dot === 0) return y;
+  }
+  return 0;
+}
+
+/* =========================================================
+   RENDER HELPERS
+   ========================================================= */
+function pad(x, n) { return x.toString(2).padStart(n, "0"); }
+
+/* --------- HERO BACKGROUND BARS ---------- */
+(function heroBars() {
+  const svg = document.getElementById("hero-bars");
+  const N = 32;
+  const W = 900, H = 260;
+  let out = "";
+  for (let i = 0; i < N; i++) {
+    const x = (W / N) * i + 4;
+    const h = 30 + Math.random() * 180;
+    const y = H/2 - h/2;
+    const color = Math.random() > 0.5 ? "#7bd3c8" : "#e89a5a";
+    const dur = (2 + Math.random() * 2).toFixed(2);
+    const delay = (Math.random() * 3).toFixed(2);
+    out += `<rect x="${x}" y="${y}" width="${(W/N) - 8}" height="${h}" fill="${color}" opacity="0.8">
+      <animate attributeName="height" values="${h};${h * 0.4};${h}" dur="${dur}s" begin="${delay}s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="${y};${y + h*0.3};${y}" dur="${dur}s" begin="${delay}s" repeatCount="indefinite"/>
+    </rect>`;
+  }
+  svg.innerHTML = out;
+})();
+
+/* --------- PROMISE SECTION: THE PAIRING ---------- */
+const PROMISE_N = 3;
+
+function randomSecret(n, avoidZero = true) {
+  let s;
+  do {
+    s = "";
+    for (let i = 0; i < n; i++) s += Math.random() < 0.5 ? "0" : "1";
+  } while (avoidZero && s === "0".repeat(n));
+  return s;
+}
+
+function xorStrings(a, b, n) {
+  let out = "";
+  for (let i = 0; i < n; i++) out += (a[i] === b[i] ? "0" : "1");
+  return out;
+}
+
+/* Simulate f with period s: f(x) = x if x_k = 0, else x XOR s, where k is the leading s-bit. */
+function simonF(x, s, n) {
+  let k = -1;
+  for (let i = n - 1; i >= 0; i--) if (s[n - 1 - i] === "1") { k = i; break; }
+  if (k === -1) return x;
+  const xBit_k = x[n - 1 - k];
+  return xBit_k === "0" ? x : xorStrings(x, s, n);
+}
+
+function renderSecretCard(s) {
+  const n = s.length;
+  let html = `<div class="hx">bit i</div><div class="hy">s_i</div>`;
+  for (let i = 0; i < n; i++) {
+    const pos = n - 1 - i;
+    html += `<div class="hx">${pos}</div>`;
+    html += `<div class="val ${s[i] === '1' ? 'one' : 'zero'}">${s[i]}</div>`;
+  }
+  document.getElementById("tt-constant").innerHTML = html;
+}
+
+function renderPairingCard(s) {
+  const n = s.length;
+  const size = 1 << n;
+  // Group inputs into cosets {x, x⊕s}
+  const seen = new Set();
+  const rows = [];
+  for (let x = 0; x < size; x++) {
+    const xStr = pad(x, n);
+    if (seen.has(xStr)) continue;
+    const partner = xorStrings(xStr, s, n);
+    seen.add(xStr); seen.add(partner);
+    const fx = simonF(xStr, s, n);
+    rows.push({ a: xStr, b: partner, f: fx });
+  }
+  let html = `<div class="hx">x</div><div class="hy">f(x)</div>`;
+  for (const r of rows) {
+    html += `<div class="hx pair">${r.a} <span class="pair-sep">·</span> ${r.b}</div>`;
+    html += `<div class="val one">${r.f}</div>`;
+  }
+  document.getElementById("tt-balanced").innerHTML = html;
+}
+
+let pairingSecret = randomSecret(PROMISE_N);
+renderSecretCard(pairingSecret);
+renderPairingCard(pairingSecret);
+document.getElementById("shuffle-balanced").addEventListener("click", () => {
+  pairingSecret = randomSecret(PROMISE_N);
+  renderSecretCard(pairingSecret);
+  renderPairingCard(pairingSecret);
+});
+
+/* =========================================================
+   CLASSICAL GAME — collision hunting
+   ========================================================= */
+const GAME_N = 4;
+const GAME_SIZE = 1 << GAME_N;
+let gameSecret = "";
+let gameQueries = [];        // [{x, f}]
+let gameByF = new Map();     // f-value -> index of first query that returned it
+let gameFound = false;
+let gameRevealedBits = false;
+
+function updateCountUI() {
+  document.getElementById("q-count").textContent = gameQueries.length;
+}
+
+function renderPeriodDisplay() {
+  const el = document.getElementById("period-bits");
+  const info = document.getElementById("collision-info");
+  if (gameFound) {
+    let html = "";
+    for (let i = 0; i < GAME_N; i++) {
+      const bit = gameSecret[i];
+      const cls = "bit revealed " + (bit === "1" ? "one" : "zero") + (!gameRevealedBits ? " just-revealed" : "");
+      html += `<span class="${cls}">${bit}</span>`;
+    }
+    el.innerHTML = html;
+    gameRevealedBits = true;
+    info.innerHTML = `collision found in ${gameQueries.length} quer${gameQueries.length === 1 ? 'y' : 'ies'} · <span class="mono">s = ${gameSecret}</span>`;
+  } else {
+    el.innerHTML = Array(GAME_N).fill('<span class="bit q">?</span>').join("");
+    info.textContent = gameQueries.length === 0 ? "no collision yet" : `${gameQueries.length} quer${gameQueries.length === 1 ? 'y' : 'ies'} so far, no collision yet`;
+  }
+}
+
+function addLogEntry(x, f, collisionWithIdx) {
+  document.getElementById("query-log").style.display = "block";
+  const list = document.getElementById("query-log-list");
+  const li = document.createElement("li");
+  const n = gameQueries.length;  // already pushed, so n is the new entry index (1-based here)
+  const note = collisionWithIdx !== null
+    ? `COLLISION with query ${collisionWithIdx + 1} · s = ${x} ⊕ ${gameQueries[collisionWithIdx].x} = ${gameSecret}`
+    : "no match";
+  li.innerHTML = `<span class="idx">${n}</span><span>f(<span class="x">${x}</span>)</span><span class="arrow">=</span><span class="fx">${f}</span><span class="note">${note}</span>`;
+  if (collisionWithIdx !== null) {
+    li.classList.add("collision");
+    // Also highlight the earlier entry
+    const earlier = list.children[collisionWithIdx];
+    if (earlier) earlier.classList.add("collision");
+  }
+  list.appendChild(li);
+  const log = document.getElementById("query-log");
+  log.scrollTop = log.scrollHeight;
+}
+
+function simonAsk(x) {
+  if (gameFound) return;
+  if (x.length !== GAME_N || !/^[01]+$/.test(x)) return;
+  // Check duplicate query
+  for (const q of gameQueries) {
+    if (q.x === x) return;  // ignore duplicate
+  }
+  const f = simonF(x, gameSecret, GAME_N);
+  let collisionWithIdx = null;
+  if (gameByF.has(f)) {
+    collisionWithIdx = gameByF.get(f);
+    gameFound = true;
+  } else {
+    gameByF.set(f, gameQueries.length);
+  }
+  gameQueries.push({ x, f });
+  updateCountUI();
+  addLogEntry(x, f, collisionWithIdx);
+  renderPeriodDisplay();
+}
+
+function randomUntriedInput() {
+  const tried = new Set(gameQueries.map(q => q.x));
+  const available = [];
+  for (let i = 0; i < GAME_SIZE; i++) {
+    const s = pad(i, GAME_N);
+    if (!tried.has(s)) available.push(s);
+  }
+  if (available.length === 0) return null;
+  return available[Math.floor(Math.random() * available.length)];
+}
+
+function resetSimonGame() {
+  gameSecret = randomSecret(GAME_N);
+  gameQueries = [];
+  gameByF = new Map();
+  gameFound = false;
+  gameRevealedBits = false;
+  updateCountUI();
+  renderPeriodDisplay();
+  document.getElementById("query-log").style.display = "none";
+  document.getElementById("query-log-list").innerHTML = "";
+  document.getElementById("custom-query").value = "";
+  document.getElementById("verdict").className = "verdict";
+}
+
+document.getElementById("custom-ask").addEventListener("click", () => {
+  const x = document.getElementById("custom-query").value.trim();
+  if (x.length === GAME_N && /^[01]+$/.test(x)) {
+    simonAsk(x);
+    document.getElementById("custom-query").value = "";
+  }
+});
+document.getElementById("custom-query").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("custom-ask").click();
+});
+document.getElementById("custom-query").addEventListener("input", (e) => {
+  e.target.value = e.target.value.replace(/[^01]/g, "").slice(0, GAME_N);
+});
+document.getElementById("random-ask").addEventListener("click", () => {
+  const x = randomUntriedInput();
+  if (x) simonAsk(x);
+});
+document.getElementById("reset-game").addEventListener("click", resetSimonGame);
+resetSimonGame();
+
+/* =========================================================
+   COST CHART — sqrt(2^n) classical vs linear quantum
+   ========================================================= */
+(function curseChart() {
+  const svg = document.getElementById("curse-svg");
+  const W = 760, H = 360, PAD_L = 60, PAD_R = 20, PAD_T = 30, PAD_B = 50;
+  const maxN = 40;
+  const ns = [];
+  for (let i = 2; i <= maxN; i += 2) ns.push(i);
+  const classical = ns.map(n => Math.sqrt(Math.pow(2, n)));
+  const quantum = ns.map(n => n);
+  const maxVal = classical[classical.length - 1];
+  const minLog = 0, maxLog = Math.log10(maxVal);
+
+  const px = (n) => PAD_L + ((n - 2) / (maxN - 2)) * (W - PAD_L - PAD_R);
+  const py = (v) => PAD_T + (1 - (Math.log10(Math.max(v, 1)) - minLog) / (maxLog - minLog)) * (H - PAD_T - PAD_B);
+
+  let html = "";
+  for (let k = 0; k <= Math.ceil(maxLog); k++) {
+    const v = Math.pow(10, k);
+    if (v > maxVal) break;
+    const y = py(v);
+    html += `<line x1="${PAD_L}" y1="${y}" x2="${W - PAD_R}" y2="${y}" stroke="#3a3128" stroke-width="0.5" stroke-dasharray="2,3"/>`;
+    html += `<text x="${PAD_L - 8}" y="${y + 4}" text-anchor="end" fill="#8a806d" font-family="JetBrains Mono" font-size="10">10^${k}</text>`;
+  }
+  for (const n of ns) {
+    if (n % 8 === 0 || n === 2) {
+      html += `<text x="${px(n)}" y="${H - PAD_B + 18}" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="10">n=${n}</text>`;
+    }
+  }
+  html += `<line x1="${PAD_L}" y1="${PAD_T}" x2="${PAD_L}" y2="${H - PAD_B}" stroke="#3a3128"/>`;
+  html += `<line x1="${PAD_L}" y1="${H - PAD_B}" x2="${W - PAD_R}" y2="${H - PAD_B}" stroke="#3a3128"/>`;
+
+  const classicalPts = ns.map((n, i) => `${px(n)},${py(classical[i])}`).join(" ");
+  html += `<polyline points="${classicalPts}" fill="none" stroke="#e89a5a" stroke-width="2.2" stroke-linejoin="round"/>`;
+  for (let i = 0; i < ns.length; i++) {
+    if (ns[i] % 8 === 0 || ns[i] === 2) {
+      html += `<circle cx="${px(ns[i])}" cy="${py(classical[i])}" r="4.5" fill="#e89a5a" stroke="#17130f" stroke-width="2"/>`;
+    }
+  }
+  const quantumPts = ns.map((n, i) => `${px(n)},${py(quantum[i])}`).join(" ");
+  html += `<polyline points="${quantumPts}" fill="none" stroke="#7bd3c8" stroke-width="2.2"/>`;
+  for (let i = 0; i < ns.length; i++) {
+    if (ns[i] % 8 === 0 || ns[i] === 2) {
+      html += `<circle cx="${px(ns[i])}" cy="${py(quantum[i])}" r="4.5" fill="#7bd3c8" stroke="#17130f" stroke-width="2"/>`;
+    }
+  }
+
+  html += `<text x="${px(maxN) - 8}" y="${py(classical[classical.length - 1]) - 14}" text-anchor="end" fill="#e89a5a" font-family="Instrument Serif" font-style="italic" font-size="16">classical · √2ⁿ queries</text>`;
+  html += `<text x="${px(maxN) - 8}" y="${py(quantum[quantum.length - 1]) - 14}" text-anchor="end" fill="#7bd3c8" font-family="Instrument Serif" font-style="italic" font-size="16">quantum · ~n queries</text>`;
+  html += `<text x="${W / 2}" y="${H - 12}" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="10" letter-spacing="2">PERIOD LENGTH</text>`;
+  html += `<text transform="translate(16,${H/2}) rotate(-90)" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="10" letter-spacing="2">QUERIES (log)</text>`;
+
+  svg.innerHTML = html;
+})();
+
+/* =========================================================
+   SUPERPOSITION DEMO
+   ========================================================= */
+(function superDemo() {
+  const SUP_N = 3;
+  const size = 1 << SUP_N;
+  let state = new Float64Array(size); state[0] = 1;
+  const container = document.getElementById("super-bars");
+  const maxH = 180;
+
+  function render() {
+    container.innerHTML = "";
+    for (let i = 0; i < size; i++) {
+      const h = Math.abs(state[i]) * maxH;
+      const bar = document.createElement("div");
+      bar.className = "super-bar";
+      bar.innerHTML = `<div class="fill" style="height:${h}px"></div><div class="lbl">|${pad(i, SUP_N)}⟩</div>`;
+      container.appendChild(bar);
+    }
+  }
+  render();
+
+  document.getElementById("super-hadamard").addEventListener("click", () => {
+    // Apply H on all SUP_N qubits
+    for (let q = 0; q < SUP_N; q++) {
+      for (let i = 0; i < size; i++) {
+        const mask = 1 << q;
+        if ((i & mask) === 0) {
+          const j = i | mask;
+          const a = state[i], b = state[j];
+          state[i] = (a + b) * INV_SQRT2;
+          state[j] = (a - b) * INV_SQRT2;
+        }
+      }
+    }
+    render();
+    document.getElementById("super-text").innerHTML =
+      `Now every amplitude is 1/√${size} ≈ ${(1/Math.sqrt(size)).toFixed(3)}. The register holds all ${size} inputs <em>at once</em>, each with equal weight.`;
+  });
+  document.getElementById("super-reset").addEventListener("click", () => {
+    state = new Float64Array(size); state[0] = 1;
+    render();
+    document.getElementById("super-text").innerHTML =
+      'The register starts in the state <span class="mono">|000⟩</span>. One amplitude is 1, the rest are 0.';
+  });
+})();
+
+/* =========================================================
+   ALGORITHM PLAYER (n = 3)
+   ========================================================= */
+const PLAYER_N = 3;
+let currentSecret = "011";
+let playerScenes = null;
+let playerStep = 0;
+let playerTimer = null;
+
+function currentValues() {
+  const scene = playerScenes.scenes[playerStep];
+  return scene.values;
+}
+
+function renderAmplitudeBars(container, values, n) {
+  container.innerHTML = "";
+  const size = values.length;
+  for (let x = 0; x < size; x++) {
+    const v = values[x];
+    const bar = document.createElement("div");
+    bar.className = "amp-bar";
+    bar.innerHTML = `<span class="val">${v.toFixed(3)}</span><div class="fill"></div><span class="lbl">|${pad(x, n)}⟩</span>`;
+    container.appendChild(bar);
+  }
+  updateAmplitudeBars(container, values);
+}
+function updateAmplitudeBars(container, values) {
+  const bars = container.querySelectorAll(".amp-bar");
+  const probMode = container.classList.contains("prob-mode");
+  const fullH = container.clientHeight;
+  const halfH = fullH / 2;
+  bars.forEach((bar, x) => {
+    const v = values[x];
+    const fill = bar.querySelector(".fill");
+    const val  = bar.querySelector(".val");
+    val.textContent = v.toFixed(3);
+    if (probMode) {
+      const h = v * fullH * 0.92;
+      fill.style.top = "auto";
+      fill.style.bottom = "0";
+      fill.style.height = h + "px";
+      fill.classList.remove("negative");
+    } else {
+      const mag = Math.abs(v);
+      const h = mag * halfH * 0.92;
+      if (v >= 0) {
+        fill.style.top = (halfH - h) + "px";
+        fill.style.height = h + "px";
+        fill.classList.remove("negative");
+      } else {
+        fill.style.top = halfH + "px";
+        fill.style.height = h + "px";
+        fill.classList.add("negative");
+      }
+    }
+  });
+}
+
+/* Circuit SVG drawing. n+1 qubit wires, columns for: X(out), H, Oracle box, H(inputs), Measure.
+   We highlight one column based on currentScene.highlight. */
+function renderCircuit(n, secret, highlight) {
+  const svg = document.getElementById("circuit-svg");
+  const totalQubits = 2 * n;
+  const W = 720, H = 40 + totalQubits * 36 + 20;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+
+  const colX = [200, 360, 510, 620];
+  const wireY = (q) => 40 + q * 36;
+
+  let html = "";
+  for (let q = 0; q < totalQubits; q++) {
+    const isInput = q < n;
+    const label = isInput ? `in ${q}` : `out ${q - n}`;
+    html += `<text x="20" y="${wireY(q) + 4}" fill="#c5b9a0" font-family="JetBrains Mono" font-size="11">${label}</text>`;
+    html += `<text x="80" y="${wireY(q) + 4}" fill="#8a806d" font-family="JetBrains Mono" font-size="11">|0⟩</text>`;
+    html += `<line x1="105" y1="${wireY(q)}" x2="${W - 20}" y2="${wireY(q)}" stroke="#3a3128" stroke-width="1"/>`;
+  }
+
+  // Dashed separator between input and output registers
+  const midY = (wireY(n - 1) + wireY(n)) / 2;
+  html += `<line x1="105" y1="${midY}" x2="${W - 20}" y2="${midY}" stroke="#3a3128" stroke-width="0.5" stroke-dasharray="2,3"/>`;
+
+  function gateBox(cx, cy, label, highlighted) {
+    const w = 30, h = 24;
+    const stroke = highlighted ? "#f5d547" : "#c5b9a0";
+    const bg     = highlighted ? "#f5d547" : "#17130f";
+    const textC  = highlighted ? "#1a1509" : "#f1e6ce";
+    return `<rect x="${cx - w/2}" y="${cy - h/2}" width="${w}" height="${h}" rx="3" fill="${bg}" stroke="${stroke}" stroke-width="1.5"/>
+            <text x="${cx}" y="${cy + 5}" text-anchor="middle" fill="${textC}" font-family="Instrument Serif" font-style="italic" font-size="16">${label}</text>`;
+  }
+
+  // Column 0: H on input qubits (first Hadamard layer)
+  for (let q = 0; q < n; q++) {
+    html += gateBox(colX[0], wireY(q), "H", highlight === 0);
+  }
+
+  // Column 1: oracle box spanning all 2n wires
+  const orTop = wireY(0) - 16, orBot = wireY(2 * n - 1) + 16;
+  const orLeft = colX[1] - 60, orRight = colX[1] + 60;
+  const orStroke = highlight === 1 ? "#f5d547" : "#7bd3c8";
+  const orBg     = highlight === 1 ? "rgba(245,213,71,0.15)" : "rgba(123,211,200,0.08)";
+  html += `<rect x="${orLeft}" y="${orTop}" width="${orRight - orLeft}" height="${orBot - orTop}" rx="6" fill="${orBg}" stroke="${orStroke}" stroke-width="1.5" stroke-dasharray="${highlight === 1 ? "" : "4,4"}"/>`;
+  html += `<text x="${colX[1]}" y="${(orTop + orBot) / 2 - 2}" text-anchor="middle" fill="${highlight === 1 ? "#f5d547" : "#7bd3c8"}" font-family="Instrument Serif" font-style="italic" font-size="20">U_f</text>`;
+  html += `<text x="${colX[1]}" y="${(orTop + orBot) / 2 + 16}" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="10">s = ${secret}</text>`;
+
+  // Column 2: H on input qubits (second Hadamard layer)
+  for (let q = 0; q < n; q++) {
+    html += gateBox(colX[2], wireY(q), "H", highlight === 2);
+  }
+
+  // Column 3: Measurement on input qubits
+  for (let q = 0; q < n; q++) {
+    const cx = colX[3], cy = wireY(q);
+    const hl = highlight === 3;
+    const stroke = hl ? "#f5d547" : "#c5b9a0";
+    const bg     = hl ? "#f5d547" : "#17130f";
+    const textC  = hl ? "#1a1509" : "#f1e6ce";
+    html += `<rect x="${cx - 15}" y="${cy - 12}" width="30" height="24" rx="3" fill="${bg}" stroke="${stroke}" stroke-width="1.5"/>
+             <path d="M${cx - 8},${cy + 4} A 8 8 0 0 1 ${cx + 8},${cy + 4}" fill="none" stroke="${textC}" stroke-width="1.5"/>
+             <line x1="${cx}" y1="${cy + 4}" x2="${cx + 6}" y2="${cy - 4}" stroke="${textC}" stroke-width="1.5"/>`;
+  }
+
+  svg.innerHTML = html;
+}
+
+function renderPlayerStep() {
+  const scene = playerScenes.scenes[playerStep];
+  document.getElementById("step-count").textContent = `Step ${playerStep} / ${playerScenes.scenes.length - 1}`;
+  document.getElementById("step-name").textContent = scene.label;
+  document.getElementById("commentary").innerHTML = scene.commentary;
+
+  const dots = document.getElementById("step-dots");
+  dots.innerHTML = "";
+  for (let i = 0; i < playerScenes.scenes.length; i++) {
+    const d = document.createElement("div");
+    d.className = "dot " + (i < playerStep ? "done" : i === playerStep ? "active" : "");
+    dots.appendChild(d);
+  }
+
+  renderCircuit(PLAYER_N, currentSecret, scene.highlight);
+
+  const values = currentValues();
+  const container = document.getElementById("amp-bars");
+  if (container.children.length !== values.length) {
+    renderAmplitudeBars(container, values, PLAYER_N);
+    requestAnimationFrame(() => updateAmplitudeBars(container, values));
+  } else {
+    updateAmplitudeBars(container, values);
+  }
+
+  document.getElementById("player-prev").disabled = playerStep === 0;
+  document.getElementById("player-next").disabled = playerStep === playerScenes.scenes.length - 1;
+}
+
+function rebuildPlayer() {
+  playerScenes = buildScenes(PLAYER_N, currentSecret);
+  playerStep = 0;
+  renderPlayerStep();
+}
+
+document.querySelectorAll("#seg-oracle button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#seg-oracle button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentSecret = btn.dataset.s;
+    rebuildPlayer();
+  });
+});
+
+document.getElementById("player-next").addEventListener("click", () => {
+  if (playerStep < playerScenes.scenes.length - 1) { playerStep++; renderPlayerStep(); }
+});
+document.getElementById("player-prev").addEventListener("click", () => {
+  if (playerStep > 0) { playerStep--; renderPlayerStep(); }
+});
+document.getElementById("player-reset").addEventListener("click", () => {
+  stopPlayer();
+  playerStep = 0;
+  renderPlayerStep();
+});
+document.getElementById("player-play").addEventListener("click", () => {
+  if (playerTimer) { stopPlayer(); return; }
+  if (playerStep === playerScenes.scenes.length - 1) playerStep = 0;
+  document.getElementById("player-play").textContent = "⏸ Pause";
+  playerTimer = setInterval(() => {
+    if (playerStep < playerScenes.scenes.length - 1) {
+      playerStep++;
+      renderPlayerStep();
+    } else {
+      stopPlayer();
+    }
+  }, 1400);
+});
+function stopPlayer() {
+  if (playerTimer) { clearInterval(playerTimer); playerTimer = null; }
+  document.getElementById("player-play").textContent = "▶ Play";
+}
+
+/* Initialize player */
+rebuildPlayer();
+
+/* =========================================================
+   SANDBOX — multi-shot + GF(2) linear algebra
+   ========================================================= */
+let sbN = 3;
+let sbS = "011";
+let sbShots = [];  // each: { y: string, rankBefore, rankAfter, useful, isZero }
+let sbRecovered = null;
+
+const sbNSlider = document.getElementById("sb-n");
+const sbNVal    = document.getElementById("sb-n-val");
+const sbSInput  = document.getElementById("sb-s");
+
+function reshapeSecret() {
+  if (sbS.length < sbN) sbS = sbS + "0".repeat(sbN - sbS.length);
+  else if (sbS.length > sbN) sbS = sbS.slice(-sbN);
+  if (sbS === "0".repeat(sbN)) sbS = "1" + sbS.slice(1);  // avoid all-zero
+  sbSInput.value = sbS;
+}
+
+function syncSandboxUI() {
+  sbNVal.textContent = sbN;
+  reshapeSecret();
+  resetShots();
+}
+
+function resetShots() {
+  sbShots = [];
+  sbRecovered = null;
+  document.getElementById("sb-result").style.display = "none";
+  document.getElementById("sb-verdict").textContent = "—";
+  document.getElementById("sb-verdict").className = "final-answer";
+  document.getElementById("shot-table").innerHTML = "";
+  document.getElementById("sb-comment").textContent = "—";
+}
+
+/* Sample a y from the input-register distribution after running the circuit.
+   For Simon with period s != 0, the distribution is uniform over
+   {y : s·y = 0 (mod 2)}, which has size 2^(n-1). */
+function sampleSimonY(n, s) {
+  const probs = Array.from(inputRegisterProbs(runSimonToFinal(n, s), n));
+  const total = probs.reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  for (let i = 0; i < probs.length; i++) {
+    r -= probs[i];
+    if (r <= 0) return pad(i, n);
+  }
+  return pad(probs.length - 1, n);
+}
+function runSimonToFinal(n, s) {
+  const state = newState(2 * n);
+  for (let q = 0; q < n; q++) applyH(state, q);
+  for (const g of simonOracleGates(n, s)) applyGate(state, g);
+  for (let q = 0; q < n; q++) applyH(state, q);
+  return state;
+}
+
+/* GF(2) Gaussian elimination. Takes rows (each a length-n bit-string),
+   returns a basis of the row space and the reduced matrix rank. */
+function gf2Rank(rows, n) {
+  const mat = rows.map(r => r.split("").map(c => parseInt(c)));
+  let rank = 0;
+  let col = 0;
+  for (let r = 0; r < mat.length && col < n; ) {
+    // find pivot
+    let pivot = -1;
+    for (let i = r; i < mat.length; i++) {
+      if (mat[i][col] === 1) { pivot = i; break; }
+    }
+    if (pivot === -1) { col++; continue; }
+    if (pivot !== r) { [mat[r], mat[pivot]] = [mat[pivot], mat[r]]; }
+    for (let i = 0; i < mat.length; i++) {
+      if (i !== r && mat[i][col] === 1) {
+        for (let c = 0; c < n; c++) mat[i][c] ^= mat[r][c];
+      }
+    }
+    r++; rank++; col++;
+  }
+  return rank;
+}
+
+/* Find the unique non-zero s satisfying y·s = 0 for all collected y's,
+   given that those y's span an (n-1)-dimensional subspace.
+   Approach: enumerate all 2^n - 1 non-zero candidates, test each. */
+function solveForPeriod(ys, n) {
+  for (let candidate = 1; candidate < (1 << n); candidate++) {
+    const cStr = pad(candidate, n);
+    let ok = true;
+    for (const y of ys) {
+      let dot = 0;
+      for (let i = 0; i < n; i++) {
+        if (cStr[i] === "1" && y[i] === "1") dot ^= 1;
+      }
+      if (dot !== 0) { ok = false; break; }
+    }
+    if (ok) return cStr;
+  }
+  return null;
+}
+
+function renderShotTable() {
+  const t = document.getElementById("shot-table");
+  let html = `<div class="sh">#</div><div class="sh">y</div><div class="sh">rank</div><div class="sh">status</div>`;
+  sbShots.forEach((sh, i) => {
+    const rowCls = sh.isZero ? "row-zero" : sh.useful ? "row-useful" : "row-redundant";
+    const status = sh.isZero ? "zero · no info" : sh.useful ? "useful · new constraint" : "redundant · already in span";
+    html += `<div class="${rowCls} sh-idx">${i + 1}</div>`;
+    html += `<div class="${rowCls} sh-y"><span class="mono">${sh.y}</span></div>`;
+    html += `<div class="${rowCls} sh-eq">${sh.rankBefore} → ${sh.rankAfter}</div>`;
+    html += `<div class="${rowCls} sh-note">${status}</div>`;
+  });
+  t.innerHTML = html;
+}
+
+function updateSandboxUI() {
+  renderShotTable();
+  document.getElementById("sb-result").style.display = "block";
+  const verd = document.getElementById("sb-verdict");
+  const comment = document.getElementById("sb-comment");
+  const ys = sbShots.map(sh => sh.y);
+  const usefulYs = ys.filter((y, i) => !sbShots[i].isZero);
+  const rank = usefulYs.length ? gf2Rank(usefulYs, sbN) : 0;
+
+  if (rank >= sbN - 1) {
+    const recovered = solveForPeriod(usefulYs, sbN);
+    sbRecovered = recovered;
+    verd.textContent = `s = ${recovered}`;
+    verd.className = "final-answer solved";
+    const ok = recovered === sbS;
+    const usefulCount = sbShots.filter(sh => sh.useful).length;
+    comment.innerHTML = ok
+      ? `Rank ${sbN - 1} reached after ${sbShots.length} shot${sbShots.length === 1 ? '' : 's'} (${usefulCount} useful). The unique non-zero <span class="mono">s</span> orthogonal to every collected <span class="mono">y</span> is <span class="mono">${recovered}</span> — and that matches the period baked into the oracle.`
+      : `Something went wrong — recovered <span class="mono">${recovered}</span> doesn't match the true period <span class="mono">${sbS}</span>.`;
+  } else {
+    verd.textContent = `rank ${rank} / ${sbN - 1}`;
+    verd.className = "final-answer";
+    comment.innerHTML = `Need rank <span class="mono">n − 1 = ${sbN - 1}</span> to solve for <span class="mono">s</span>. Keep running.`;
+  }
+}
+
+function runOnce() {
+  if (sbRecovered) return;  // already solved
+  const y = sampleSimonY(sbN, sbS);
+  const isZero = y === "0".repeat(sbN);
+  const prevYs = sbShots.filter(sh => !sh.isZero).map(sh => sh.y);
+  const rankBefore = prevYs.length ? gf2Rank(prevYs, sbN) : 0;
+  const rankAfter = isZero ? rankBefore : gf2Rank([...prevYs, y], sbN);
+  const useful = rankAfter > rankBefore;
+  sbShots.push({ y, rankBefore, rankAfter, useful, isZero });
+  updateSandboxUI();
+}
+
+sbNSlider.addEventListener("input", e => {
+  sbN = parseInt(e.target.value);
+  syncSandboxUI();
+});
+sbSInput.addEventListener("input", e => {
+  const v = e.target.value.replace(/[^01]/g, "").slice(0, sbN);
+  sbS = v;
+  e.target.value = v;
+  resetShots();
+});
+document.getElementById("sb-random").addEventListener("click", () => {
+  let s;
+  do {
+    s = "";
+    for (let i = 0; i < sbN; i++) s += Math.random() < 0.5 ? "0" : "1";
+  } while (s === "0".repeat(sbN));
+  sbS = s;
+  sbSInput.value = s;
+  resetShots();
+});
+
+document.getElementById("sb-run").addEventListener("click", runOnce);
+document.getElementById("sb-reset").addEventListener("click", resetShots);
+document.getElementById("sb-autorun").addEventListener("click", () => {
+  // Run repeatedly until solved (capped to avoid infinite loops)
+  let safety = 0;
+  while (!sbRecovered && safety < 50) {
+    runOnce();
+    safety++;
+  }
+});
+
+syncSandboxUI();
+
+/* =========================================================
+   PROGRESS RAIL + REVEAL ON SCROLL
+   ========================================================= */
+(function observers() {
+  const sections = document.querySelectorAll("section[id]");
+  const railLinks = document.querySelectorAll(".rail a");
+  const sectionToLink = {};
+  railLinks.forEach(a => sectionToLink[a.getAttribute("href").slice(1)] = a);
+
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        railLinks.forEach(a => a.classList.remove("active"));
+        const link = sectionToLink[e.target.id];
+        if (link) link.classList.add("active");
+      }
+    });
+  }, { rootMargin: "-45% 0px -45% 0px" });
+  sections.forEach(s => io.observe(s));
+
+  // Reveal observer
+  const reveals = document.querySelectorAll(".reveal, h2, .lead, .promise-card, .game-board, .curse-chart, .super-demo, .player, .sandbox, .stat-row");
+  reveals.forEach(r => r.classList.add("reveal"));
+  const ro = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add("seen");
+        ro.unobserve(e.target);
+      }
+    });
+  }, { rootMargin: "0px 0px -10% 0px" });
+  reveals.forEach(r => ro.observe(r));
+})();
+
+</script>
+</body>
+</html>
