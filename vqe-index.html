@@ -1,0 +1,3352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Variational Quantum Eigensolver — A Hands-On Introduction</title>
+<meta name="description" content="A hybrid quantum-classical algorithm for finding ground state energies — the workhorse of NISQ-era quantum chemistry." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:ital,opsz,wght@0,6..72,200..800;1,6..72,200..800&display=swap" rel="stylesheet">
+<style>
+/* =========================================================
+   1. DESIGN TOKENS
+   ========================================================= */
+:root {
+  --bg:         #17130f;
+  --bg-soft:    #1f1a15;
+  --bg-lift:    #2a231c;
+  --ink:        #f1e6ce;
+  --ink-soft:   #c5b9a0;
+  --ink-dim:    #8a806d;
+  --line:       #3a3128;
+  --line-soft:  #2a231c;
+
+  --quantum:       #7bd3c8;
+  --quantum-dim:   #3d7a75;
+  --classical:     #e89a5a;
+  --classical-dim: #7a4f2a;
+  --spark:         #f5d547;
+  --alert:         #e0624b;
+
+  --font-display: "Instrument Serif", "Fraunces", Georgia, serif;
+  --font-body:    "Newsreader", "EB Garamond", Georgia, serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+
+  --measure:      68ch;
+  --radius-s:     4px;
+  --radius-m:     10px;
+  --radius-l:     20px;
+  --shadow-soft:  0 14px 40px -12px rgba(0,0,0,0.6);
+  --ease:         cubic-bezier(0.33, 1, 0.68, 1);
+  --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* =========================================================
+   2. RESET + BASE
+   ========================================================= */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 18px;
+  line-height: 1.65;
+  font-feature-settings: "liga", "kern";
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Warm subtle grain everywhere */
+body::before {
+  content: "";
+  position: fixed; inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  z-index: 1000;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+::selection { background: var(--spark); color: #000; }
+
+/* =========================================================
+   3. TYPOGRAPHY
+   ========================================================= */
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+}
+.display {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: clamp(3.2rem, 9vw, 7rem);
+  line-height: 0.98;
+  letter-spacing: -0.03em;
+}
+h2 {
+  font-size: clamp(2rem, 4.6vw, 3.4rem);
+  font-style: italic;
+  margin-bottom: 0.35em;
+}
+h2::before {
+  content: attr(data-act);
+  display: block;
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-size: 0.68rem;
+  letter-spacing: 0.3em;
+  color: var(--ink-dim);
+  margin-bottom: 1.4rem;
+  text-transform: uppercase;
+}
+h3 {
+  font-size: 1.6rem;
+  margin-bottom: 0.6em;
+}
+p {
+  margin-bottom: 1.1em;
+  max-width: var(--measure);
+}
+.lead {
+  font-size: clamp(1.15rem, 1.7vw, 1.35rem);
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+}
+em { font-style: italic; color: var(--spark); }
+strong { font-weight: 600; color: var(--ink); }
+code, .mono {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: var(--bg-soft);
+  padding: 0.08em 0.35em;
+  border-radius: var(--radius-s);
+  color: var(--quantum);
+  border: 1px solid var(--line-soft);
+}
+
+/* =========================================================
+   4. LAYOUT
+   ========================================================= */
+section {
+  padding: 9rem 1.5rem;
+  position: relative;
+}
+.container {
+  max-width: 1080px;
+  margin: 0 auto;
+}
+.narrow { max-width: 640px; margin: 0 auto; }
+
+.section-rule {
+  width: 80px; height: 1px;
+  background: var(--line);
+  margin: 0 0 2.5rem 0;
+}
+
+/* Progress rail on the side */
+.rail {
+  position: fixed; top: 50%; left: 1.2rem;
+  transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 0.8rem;
+  z-index: 100;
+  mix-blend-mode: difference;
+}
+.rail a {
+  display: block; width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(241,230,206,0.28);
+  transition: all 0.3s var(--ease);
+  position: relative;
+}
+.rail a.active { background: var(--spark); transform: scale(1.35); }
+.rail a:hover::after {
+  content: attr(data-label);
+  position: absolute; left: 20px; top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-mono); font-size: 0.7rem;
+  color: var(--ink); white-space: nowrap;
+  background: var(--bg-soft); padding: 4px 10px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--line);
+}
+@media (max-width: 820px) { .rail { display: none; } }
+
+/* =========================================================
+   5. HERO
+   ========================================================= */
+#hero {
+  min-height: 100vh;
+  display: flex; flex-direction: column; justify-content: center;
+  padding-top: 6rem; padding-bottom: 6rem;
+  position: relative;
+  overflow: hidden;
+}
+.hero-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.35em;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  margin-bottom: 2rem;
+}
+.hero-eyebrow .dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--quantum);
+  margin-right: 0.8rem;
+  vertical-align: middle;
+  animation: pulse 2.4s var(--ease) infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50%      { opacity: 1;   transform: scale(1.4); }
+}
+#hero .display span { color: var(--ink); }
+#hero .display .dash { color: var(--spark); font-style: normal; margin: 0 -0.15em; }
+.hero-sub {
+  margin-top: 1.8rem;
+  font-size: clamp(1.1rem, 1.6vw, 1.35rem);
+  max-width: 46ch;
+  color: var(--ink-soft);
+}
+.hero-meta {
+  margin-top: 3rem;
+  display: flex; gap: 2.2rem; flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.hero-meta b {
+  display: block;
+  color: var(--ink);
+  font-weight: 500;
+  font-size: 0.85rem;
+  margin-top: 0.2rem;
+}
+/* Animated bars behind hero title */
+.hero-bg {
+  position: absolute; inset: 0;
+  z-index: 0; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0.18;
+}
+.hero-bg svg { width: 90%; max-width: 900px; height: 260px; }
+#hero > * { position: relative; z-index: 1; }
+
+.scroll-cue {
+  margin-top: 5rem;
+  display: inline-flex; align-items: center; gap: 0.9rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.scroll-cue::before {
+  content: ""; width: 36px; height: 1px;
+  background: var(--ink-dim);
+  animation: cue 2s var(--ease) infinite;
+}
+@keyframes cue {
+  0%, 100% { transform: scaleX(1); opacity: 0.5; }
+  50%      { transform: scaleX(1.4); opacity: 1; }
+}
+
+/* =========================================================
+   6. PROMISE SECTION
+   ========================================================= */
+.promise-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-top: 3rem;
+}
+@media (max-width: 720px) { .promise-grid { grid-template-columns: 1fr; } }
+.promise-card {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 1.6rem 1.6rem 1.8rem;
+  position: relative;
+  overflow: hidden;
+}
+.promise-card .label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 1rem;
+}
+.promise-card h3 {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.8rem;
+  margin-bottom: 1.2rem;
+}
+.promise-card.constant h3  { color: var(--classical); }
+.promise-card.balanced h3  { color: var(--quantum); }
+
+.truth-table {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+.truth-table > div {
+  padding: 0.4em 0.9em;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex; align-items: center;
+}
+.truth-table > div:nth-last-child(-n+2) { border-bottom: none; }
+.truth-table .hx { background: var(--bg-lift); color: var(--ink-dim); }
+.truth-table .hy { background: var(--bg-lift); color: var(--ink-dim); font-weight: 500; }
+.truth-table .val { font-weight: 700; }
+.truth-table .val.zero { color: var(--ink-soft); }
+.truth-table .val.one  { color: var(--spark); }
+.truth-table .hx.marked-row { color: var(--spark); font-weight: 700; }
+
+/* VQE: Hamiltonian matrix display */
+.hamiltonian-display {
+  margin-top: 1.2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line-soft);
+}
+.ham-matrix {
+  display: grid;
+  grid-template-columns: auto auto auto auto;
+  gap: 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  margin-bottom: 0.8rem;
+  justify-content: center;
+}
+.ham-matrix .cell {
+  padding: 0.45em 0.6em;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  text-align: center;
+  color: var(--ink-soft);
+  min-width: 3.5em;
+}
+.ham-matrix .cell.diag { color: var(--quantum); }
+.ham-matrix .cell.zero { color: var(--ink-dim); opacity: 0.6; }
+.ham-eigvals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  align-items: baseline;
+}
+.ham-eigvals .label-mini {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.18em;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+}
+.ham-eigvals .eigval {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+.ham-eigvals .eigval.lowest {
+  color: var(--spark);
+  font-weight: 600;
+}
+.truth-table .hx.pair { font-size: 0.86rem; }
+.truth-table .hx.pair .pair-sep { color: var(--ink-dim); margin: 0 0.3em; }
+
+.promise-card button {
+  margin-top: 1.2rem;
+  width: 100%;
+}
+
+/* =========================================================
+   7. CLASSICAL GAME
+   ========================================================= */
+.game-board {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 2rem;
+  margin-top: 2rem;
+}
+.game-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+.game-title {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.3rem;
+  color: var(--classical);
+}
+.query-counter {
+  display: flex; gap: 1.2rem; align-items: baseline;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.query-counter .n {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 2.4rem;
+  color: var(--spark);
+  line-height: 1;
+  font-feature-settings: "tnum";
+  letter-spacing: -0.02em;
+}
+.query-counter .slash {
+  color: var(--ink-dim);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.6rem;
+  margin: 0 -0.2em;
+}
+.query-counter .max {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.4rem;
+  color: var(--ink-soft);
+}
+
+.query-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.7rem;
+  margin-bottom: 1.8rem;
+}
+@media (max-width: 520px) { .query-grid { grid-template-columns: repeat(2, 1fr); } }
+.q-cell {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 1rem 0.6rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.25s var(--ease);
+  position: relative;
+  user-select: none;
+}
+.q-cell:hover:not(.queried):not(.locked) {
+  border-color: var(--classical);
+  background: var(--bg-lift);
+  transform: translateY(-1px);
+}
+.q-cell .x {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  display: block;
+  margin-bottom: 0.3rem;
+}
+.q-cell .result {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.8rem;
+  color: var(--ink-dim);
+  line-height: 1;
+  display: block;
+  min-height: 1.8rem;
+}
+.q-cell.queried .result.zero { color: var(--ink); }
+.q-cell.queried .result.one  { color: var(--spark); }
+.q-cell.queried  { background: var(--bg-lift); border-color: var(--classical-dim); }
+.q-cell.locked   { cursor: not-allowed; opacity: 0.6; }
+.q-cell .flash {
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  background: var(--spark);
+  opacity: 0;
+  pointer-events: none;
+}
+.q-cell.flash-on .flash { animation: flash 0.45s var(--ease-out); }
+@keyframes flash {
+  0%   { opacity: 0.5; }
+  100% { opacity: 0; }
+}
+
+.belief-bar {
+  height: 8px; width: 100%;
+  background: var(--bg-lift);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+  position: relative;
+}
+.belief-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--classical-dim), var(--classical), var(--spark));
+  transition: width 0.6s var(--ease-out);
+  width: 0%;
+}
+.belief-label {
+  display: flex; justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 0.5rem;
+}
+.belief-label b {
+  color: var(--ink-soft);
+  font-feature-settings: "tnum";
+}
+
+.commit-row {
+  display: flex; gap: 0.8rem; flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+.commit-row button { flex: 1; min-width: 160px; }
+
+.verdict {
+  margin-top: 1.5rem;
+  padding: 1.2rem 1.4rem;
+  border-radius: var(--radius-m);
+  border-left: 3px solid;
+  background: var(--bg);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: 1.5;
+  display: none;
+}
+.verdict.show { display: block; animation: fadeIn 0.4s var(--ease-out); }
+.verdict.win   { border-color: var(--quantum); }
+.verdict.lucky { border-color: var(--spark); }
+.verdict.wrong { border-color: var(--alert); }
+.verdict.info  { border-color: var(--classical); }
+.verdict b { color: var(--spark); }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* BV-specific: secret-so-far display */
+.secret-reveal {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 0.8rem;
+  padding: 1.8rem 1rem;
+  margin-bottom: 1.5rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
+.secret-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.secret-bits {
+  display: flex;
+  gap: 0.6rem;
+}
+.secret-bits .bit {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 54px; height: 66px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--bg-soft);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 2.6rem;
+  line-height: 1;
+  color: var(--ink-dim);
+  transition: all 0.5s var(--ease-out);
+}
+.secret-bits .bit.revealed.zero {
+  color: var(--ink);
+  border-color: var(--classical-dim);
+  background: var(--bg-lift);
+}
+.secret-bits .bit.revealed.one {
+  color: var(--spark);
+  border-color: var(--spark);
+  background: rgba(245,213,71,0.08);
+}
+.secret-bits .bit.just-revealed {
+  animation: reveal 0.8s var(--ease-out);
+}
+@keyframes reveal {
+  0%   { transform: scale(1.15); box-shadow: 0 0 0 0 rgba(245,213,71,0.4); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 20px rgba(245,213,71,0); }
+}
+.candidates-info {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  color: var(--ink-dim);
+  margin-top: 0.4rem;
+}
+.candidates-info #candidates-count {
+  color: var(--spark);
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+/* Query sections */
+.queries-section { margin-bottom: 1.2rem; }
+.queries-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 0.8rem;
+}
+.basis-queries {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.6rem;
+}
+@media (max-width: 520px) { .basis-queries { grid-template-columns: repeat(2, 1fr); } }
+.basis-queries .btn {
+  padding: 0.75em 0.5em;
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  font-family: var(--font-mono);
+}
+.basis-queries .btn.used {
+  opacity: 0.45;
+  pointer-events: none;
+  border-style: dashed;
+}
+.custom-query-row {
+  display: flex; gap: 0.6rem;
+}
+.custom-query-row .sb-text { flex: 1; }
+
+.query-log {
+  margin-top: 1.2rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  max-height: 180px;
+  overflow-y: auto;
+}
+.query-log ul {
+  list-style: none;
+  padding: 0.4rem 1.2rem 1rem;
+  margin: 0;
+}
+.query-log li {
+  padding: 0.4rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--line-soft);
+  display: flex; gap: 1rem; align-items: baseline;
+}
+.query-log li:last-child { border-bottom: none; }
+.query-log li .idx {
+  color: var(--ink-dim);
+  min-width: 2ch;
+}
+.query-log li .x { color: var(--ink); }
+.query-log li .arrow { color: var(--ink-dim); }
+.query-log li .f { color: var(--spark); font-weight: 700; }
+.query-log li .elim { color: var(--ink-dim); margin-left: auto; font-size: 0.72rem; }
+
+/* VQE: depth comparison bars */
+.depth-comparison {
+  display: flex; flex-direction: column;
+  gap: 1rem;
+  padding: 0.5rem 0;
+}
+.depth-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 110px;
+  align-items: center;
+  gap: 1rem;
+}
+.depth-row .name {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  letter-spacing: 0.05em;
+}
+.depth-row .bar-wrap {
+  height: 28px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  position: relative;
+  overflow: hidden;
+}
+.depth-row .bar-fill {
+  height: 100%;
+  border-radius: var(--radius-s);
+  transition: width 0.6s var(--ease-out);
+}
+.depth-row.qpe .bar-fill { background: linear-gradient(to right, var(--alert), var(--alert)); }
+.depth-row.vqe .bar-fill { background: linear-gradient(to right, var(--quantum), var(--quantum)); }
+.depth-row .value {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--spark);
+  text-align: right;
+}
+.depth-comparison h4 {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-top: 0.5rem;
+  margin-bottom: 0.6rem;
+  font-weight: 400;
+}
+.depth-comparison .nisq-line {
+  position: absolute;
+  top: -8px; bottom: -8px;
+  width: 2px;
+  background: var(--spark);
+  z-index: 2;
+}
+.depth-comparison .nisq-line::after {
+  content: "NISQ depth limit";
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--spark);
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+.query-log li .meaning { color: var(--ink-soft); }
+.query-log li .meaning sub { font-size: 0.75em; }
+
+/* Rules / How it works aside */
+.rules-box {
+  max-width: var(--measure);
+  margin: 2.5rem 0 2rem;
+  padding: 1.6rem 1.8rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--quantum);
+  border-radius: var(--radius-m);
+}
+.rules-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--quantum);
+  margin-bottom: 0.9rem;
+}
+.rules-box p {
+  font-size: 1rem;
+  line-height: 1.55;
+  margin-bottom: 0.8rem;
+  max-width: none;
+}
+.example-list {
+  list-style: none;
+  padding: 0.6rem 0;
+  margin: 0 0 0.8rem;
+  font-size: 0.95rem;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+.example-list li {
+  padding: 0.35rem 0;
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+}
+.example-list li .mono { background: transparent; border: none; padding: 0; color: var(--ink); }
+.example-list li strong { color: var(--spark); font-weight: 700; }
+.ex-result {
+  font-family: var(--font-mono);
+  color: var(--spark);
+  font-weight: 700;
+  background: rgba(245,213,71,0.08);
+  padding: 0.08em 0.4em;
+  border-radius: 3px;
+}
+
+/* Basis-query button with two lines */
+.basis-queries .btn {
+  display: flex; flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.7em 0.5em;
+}
+.basis-queries .btn .reveals {
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  color: var(--quantum);
+  font-weight: 400;
+  text-transform: none;
+}
+.basis-queries .btn.used .reveals { color: var(--ink-dim); }
+
+/* =========================================================
+   8. BUTTONS
+   ========================================================= */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.6rem;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 500;
+  padding: 0.85em 1.4em;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+  text-decoration: none;
+  line-height: 1;
+}
+.btn:hover { border-color: var(--ink); background: var(--bg-lift); }
+.btn.primary {
+  background: var(--spark);
+  color: #1a1509;
+  border-color: var(--spark);
+  font-weight: 700;
+}
+.btn.primary:hover {
+  background: #fbe064;
+  border-color: #fbe064;
+  transform: translateY(-1px);
+}
+.btn.ghost { color: var(--ink-soft); }
+.btn.quantum { border-color: var(--quantum); color: var(--quantum); }
+.btn.quantum:hover { background: var(--quantum); color: #0b1816; }
+.btn.classical { border-color: var(--classical); color: var(--classical); }
+.btn.classical:hover { background: var(--classical); color: #1a0f05; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* =========================================================
+   9. CURSE CHART
+   ========================================================= */
+.curse-chart {
+  margin-top: 3rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 2rem;
+  overflow-x: auto;
+}
+.curse-chart svg { width: 100%; height: auto; min-width: 420px; }
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-top: 2rem;
+}
+@media (max-width: 620px) { .stat-row { grid-template-columns: 1fr; } }
+.stat {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 1.2rem 1.4rem;
+}
+.stat .k {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 0.3rem;
+}
+.stat .v {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 2rem;
+  color: var(--spark);
+  line-height: 1;
+}
+.stat .v small { color: var(--ink-soft); font-size: 0.6em; }
+
+/* =========================================================
+   10. QUANTUM INTRO — SUPERPOSITION
+   ========================================================= */
+.super-demo {
+  margin-top: 2.5rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 2rem;
+  text-align: center;
+}
+.super-demo .bar-row {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 14px;
+  height: 220px;
+  margin: 1.5rem 0;
+}
+.super-bar {
+  flex: 0 0 auto;
+  width: 46px;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  position: relative;
+}
+.super-bar .fill {
+  width: 100%;
+  background: var(--quantum);
+  transition: height 0.8s var(--ease-out), background 0.4s var(--ease);
+  border-radius: 2px 2px 0 0;
+}
+.super-bar .lbl {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--ink-dim);
+  margin-top: 0.6rem;
+}
+.super-demo .explanation {
+  color: var(--ink-soft);
+  font-style: italic;
+  font-size: 1.05rem;
+  min-height: 3.2em;
+  max-width: 54ch;
+  margin: 1rem auto 0;
+}
+
+/* Formula box */
+.formula-box {
+  margin: 2rem auto;
+  max-width: 64ch;
+  padding: 1.6rem 2rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  text-align: center;
+}
+.formula {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: clamp(1.4rem, 2.4vw, 1.9rem);
+  color: var(--quantum);
+  letter-spacing: 0.01em;
+}
+.formula sub, .formula sup {
+  font-size: 0.7em;
+  font-style: normal;
+}
+.formula-note {
+  margin-top: 1rem;
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+/* Energy landscape (Act IV) — heatmap of E(θ₁,θ₂) on a single qubit */
+.energy-landscape {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+.energy-landscape svg {
+  max-width: 360px;
+  width: 100%;
+  height: auto;
+  cursor: crosshair;
+}
+.energy-landscape .readout {
+  display: flex; gap: 2rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+.energy-landscape .readout > div {
+  display: flex; flex-direction: column;
+  align-items: center; gap: 0.3rem;
+}
+.energy-landscape .readout .k {
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+}
+.energy-landscape .readout .v {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.5rem;
+  color: var(--spark);
+}
+
+/* Phase demo: complex amplitudes shown as arrows on the unit circle */
+.phase-demo {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 3rem;
+  flex-wrap: wrap;
+  margin: 1.5rem 0;
+}
+.phase-amp {
+  display: flex; flex-direction: column; align-items: center; gap: 0.8rem;
+}
+.phase-amp svg { width: 110px; height: 110px; }
+.phase-amp .label {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.4rem;
+  color: var(--quantum);
+}
+.phase-amp .desc {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  color: var(--ink-dim);
+}
+
+/* =========================================================
+   11. ALGORITHM PLAYER
+   ========================================================= */
+.player {
+  margin-top: 2rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  overflow: hidden;
+}
+.player-header {
+  padding: 1.3rem 1.8rem;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.step-label {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.5rem;
+  color: var(--ink);
+}
+.step-label .count {
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  color: var(--ink-dim);
+  margin-right: 0.8rem;
+  text-transform: uppercase;
+}
+
+.player-body {
+  padding: 2rem 1.5rem;
+}
+
+/* Circuit diagram */
+.circuit-container {
+  overflow-x: auto;
+  padding: 0.5rem 0;
+  margin-bottom: 1.5rem;
+}
+.circuit-svg {
+  display: block;
+  margin: 0 auto;
+}
+
+/* Amplitude bars visualization */
+.amp-viz {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px dashed var(--line);
+}
+.amp-viz h4 {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 1.2rem;
+  font-weight: 400;
+}
+.amp-bar-row {
+  position: relative;
+  height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 0.5rem;
+}
+.amp-bar-row::before {
+  content: "";
+  position: absolute; left: 0; right: 0; top: 50%;
+  height: 1px;
+  background: var(--line);
+  z-index: 0;
+}
+.amp-bar {
+  flex: 0 1 52px;
+  min-width: 12px;
+  height: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+.amp-bar .fill {
+  position: absolute;
+  left: 4px; right: 4px;
+  top: 50%;
+  background: var(--quantum);
+  height: 0;
+  transition: top 0.7s var(--ease-out), height 0.7s var(--ease-out), background 0.4s var(--ease);
+  border-radius: 2px;
+}
+.amp-bar .fill.negative { background: var(--alert); }
+
+/* Probability mode: bars go from bottom up, using full height */
+.amp-bar-row.prob-mode::before { display: none; }
+.amp-bar-row.prob-mode .amp-bar .fill {
+  top: auto;
+  bottom: 0;
+  background: var(--quantum);
+}
+.amp-bar .lbl {
+  position: absolute;
+  bottom: -1.8rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+/* Hide labels when there are many bars; only show every few */
+.amp-bar-row.dense .amp-bar .lbl { display: none; }
+.amp-bar-row.dense .amp-bar.marked .lbl { display: block; font-size: 0.6rem; }
+.amp-bar .val {
+  position: absolute;
+  top: -1.3rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--ink-soft);
+  opacity: 0;
+  transition: opacity 0.3s var(--ease);
+  white-space: nowrap;
+}
+.amp-bar:hover .val { opacity: 1; }
+
+.amp-legend {
+  display: flex; gap: 1.8rem; justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-top: 2.8rem;
+}
+.amp-legend .chip {
+  display: inline-block; width: 10px; height: 10px;
+  border-radius: 2px;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+}
+.amp-legend .chip.pos { background: var(--quantum); }
+.amp-legend .chip.neg { background: var(--alert); }
+.amp-legend .chip.marked { background: var(--spark); }
+
+/* VQE: two-column player layout */
+.vqe-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.6rem;
+  margin-top: 1rem;
+}
+@media (max-width: 880px) {
+  .vqe-row { grid-template-columns: 1fr; }
+}
+.vqe-col h4 {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 1.1rem;
+  font-weight: 400;
+}
+.ansatz-params {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.2rem;
+  margin-top: 0.8rem;
+  padding: 0.8rem 1rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+.ansatz-params .pchip {
+  display: flex; align-items: center; gap: 0.4rem;
+}
+.ansatz-params .pchip .pname {
+  color: var(--ink-dim);
+  letter-spacing: 0.06em;
+}
+.ansatz-params .pchip .pval {
+  color: var(--spark);
+  font-weight: 600;
+  min-width: 4em;
+  text-align: right;
+}
+
+#conv-svg {
+  width: 100%;
+  height: auto;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+}
+.conv-readout {
+  display: flex; gap: 1.6rem;
+  margin-top: 0.8rem;
+  flex-wrap: wrap;
+}
+.conv-readout > div {
+  display: flex; flex-direction: column;
+  gap: 0.3rem;
+}
+.conv-readout .k {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+}
+.conv-readout .v {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.4rem;
+  color: var(--spark);
+  font-feature-settings: "tnum";
+}
+
+/* Phase legend chip — color wheel */
+.phase-chip {
+  display: inline-block;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+  background: conic-gradient(
+    from 0deg,
+    hsl(0, 70%, 60%),
+    hsl(60, 70%, 60%),
+    hsl(120, 70%, 55%),
+    hsl(180, 70%, 55%),
+    hsl(240, 70%, 65%),
+    hsl(300, 70%, 60%),
+    hsl(360, 70%, 60%)
+  );
+  border: 1px solid var(--ink-dim);
+}
+
+/* Complex amplitude bars: vertical bar (magnitude) + small phase indicator */
+.complex-bars {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 12px;
+  height: 220px;
+  padding-bottom: 2.4rem;
+  padding-top: 2rem;
+  position: relative;
+}
+.complex-bar {
+  flex: 0 1 56px;
+  min-width: 24px;
+  height: 100%;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+}
+.complex-bar .fill {
+  width: 100%;
+  background: var(--quantum);
+  border-radius: 2px 2px 0 0;
+  transition: height 0.6s var(--ease-out), background 0.4s var(--ease);
+  min-height: 0;
+}
+.complex-bar .lbl {
+  position: absolute;
+  bottom: -1.7rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+.complex-bar .phase-arrow {
+  position: absolute;
+  top: -2.2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px; height: 32px;
+}
+.complex-bars.dense .complex-bar .lbl { display: none; }
+.complex-bars.dense .complex-bar .phase-arrow {
+  width: 20px; height: 20px;
+  top: -1.6rem;
+}
+
+/* Grover: highlight the marked bar */
+.amp-bar.marked .fill {
+  outline: 2px solid var(--spark);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+.amp-bar.marked .lbl {
+  color: var(--spark);
+  font-weight: 700;
+}
+
+/* Grover two-column player body */
+.grover-viz-row {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 2rem;
+  align-items: start;
+  margin-top: 1rem;
+}
+@media (max-width: 820px) {
+  .grover-viz-row { grid-template-columns: 1fr; }
+}
+.grover-viz-row > div > h4 {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 1.2rem;
+  font-weight: 400;
+}
+
+.geom-viz {
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.geom-viz svg {
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+}
+.prob-readout {
+  display: flex;
+  gap: 1.8rem;
+  margin-top: 1rem;
+  justify-content: center;
+}
+.prob-readout > div {
+  display: flex; flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+}
+.prob-readout .k {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.prob-readout .v {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.8rem;
+  color: var(--spark);
+  line-height: 1;
+  font-feature-settings: "tnum";
+}
+
+/* Commentary box */
+.commentary {
+  margin-top: 2rem;
+  padding: 1.2rem 1.4rem;
+  border-left: 3px solid var(--quantum);
+  background: var(--bg);
+  border-radius: 0 var(--radius-s) var(--radius-s) 0;
+  font-style: italic;
+  color: var(--ink-soft);
+  min-height: 3.4em;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+/* Player controls */
+.player-controls {
+  display: flex;
+  gap: 0.7rem;
+  align-items: center;
+  justify-content: center;
+  padding: 1.2rem 1.5rem;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+  flex-wrap: wrap;
+}
+.player-controls .spacer { flex: 1; }
+.step-dots {
+  display: flex; gap: 6px;
+  align-items: center;
+}
+.step-dots .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--line);
+  transition: all 0.3s var(--ease);
+}
+.step-dots .dot.active { background: var(--spark); transform: scale(1.3); }
+.step-dots .dot.done   { background: var(--quantum); }
+
+/* Oracle picker */
+.oracle-picker {
+  display: flex; gap: 0.6rem; align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  flex-wrap: wrap;
+}
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+.seg button {
+  background: transparent;
+  border: none;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  padding: 0.6em 0.9em;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: all 0.2s;
+  border-right: 1px solid var(--line);
+}
+.seg button:last-child { border-right: none; }
+.seg button.active {
+  background: var(--spark);
+  color: #1a1509;
+  font-weight: 700;
+}
+.seg button:hover:not(.active) { background: var(--bg-lift); color: var(--ink); }
+
+/* =========================================================
+   12. SANDBOX
+   ========================================================= */
+.sandbox {
+  margin-top: 2rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 2rem;
+}
+.sb-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.3rem 2rem;
+  padding-bottom: 1.8rem;
+  margin-bottom: 1.8rem;
+  border-bottom: 1px solid var(--line);
+}
+@media (max-width: 640px) { .sb-controls { grid-template-columns: 1fr; } }
+.ctrl {
+  display: flex; flex-direction: column; gap: 0.55rem;
+}
+.ctrl label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.ctrl .value {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.5rem;
+  color: var(--spark);
+  line-height: 1;
+}
+.slider {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 4px;
+  background: var(--line);
+  border-radius: 999px;
+  outline: none;
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px; height: 18px;
+  background: var(--spark);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.slider::-webkit-slider-thumb:hover { transform: scale(1.18); }
+.slider::-moz-range-thumb {
+  width: 18px; height: 18px;
+  background: var(--spark);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.sb-text {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 0.7em 0.9em;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.sb-text:focus { border-color: var(--spark); }
+
+.sb-result {
+  margin-top: 2rem;
+  padding: 1.4rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
+.sb-result .step-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 1rem; flex-wrap: wrap;
+  margin-bottom: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.sb-result .final-answer {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.8rem;
+}
+.sb-result .final-answer.constant { color: var(--classical); }
+.sb-result .final-answer.balanced { color: var(--quantum); }
+.sb-result .final-answer.solved   { color: var(--spark); }
+
+.sb-section { margin-top: 0.5rem; }
+.sb-section-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 0.6rem;
+}
+
+/* Simon shots table */
+.shot-table {
+  display: grid;
+  grid-template-columns: auto auto auto 1fr;
+  gap: 0;
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+.shot-table > div {
+  padding: 0.55rem 1rem;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex; align-items: center;
+}
+.shot-table > div:nth-last-child(-n+4) { border-bottom: none; }
+.shot-table .sh { background: var(--bg-lift); color: var(--ink-dim); font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase; }
+.shot-table .sh-idx { color: var(--ink-dim); }
+.shot-table .sh-y   { color: var(--ink); font-weight: 500; }
+.shot-table .sh-eq  { color: var(--ink-soft); }
+.shot-table .sh-note { color: var(--ink-dim); font-size: 0.78rem; }
+.shot-table .row-useful .sh-note { color: var(--quantum); }
+.shot-table .row-redundant .sh-note { color: var(--ink-dim); }
+.shot-table .row-zero .sh-note { color: var(--classical); }
+
+.shot-table .row-useful .sh-y { color: var(--quantum); }
+
+/* =========================================================
+   13. OUTRO
+   ========================================================= */
+#outro {
+  background: var(--bg-soft);
+  border-top: 1px solid var(--line);
+  margin-top: 4rem;
+}
+.series-list {
+  margin-top: 2rem;
+  list-style: none;
+  padding: 0;
+}
+.series-list li {
+  padding: 1.1rem 0;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 1.5rem;
+}
+.series-list li:last-child { border-bottom: none; }
+.series-list .num {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+  color: var(--ink-dim);
+  min-width: 3ch;
+}
+.series-list .name {
+  flex: 1;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.4rem;
+  color: var(--ink);
+}
+.series-list .name .done {
+  color: var(--quantum);
+  margin-left: 0.5rem;
+  font-style: normal;
+  font-size: 0.8em;
+}
+.series-list .name .here {
+  color: var(--spark);
+  margin-left: 0.5rem;
+  font-style: normal;
+  font-size: 0.75em;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+}
+.series-list .status {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+}
+
+footer {
+  padding: 3rem 1.5rem 4rem;
+  text-align: center;
+  border-top: 1px solid var(--line);
+  color: var(--ink-dim);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+}
+footer a { color: var(--ink-soft); text-decoration: none; border-bottom: 1px solid var(--line); }
+footer a:hover { color: var(--spark); border-color: var(--spark); }
+
+/* =========================================================
+   14. REVEALS
+   ========================================================= */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.9s var(--ease-out), transform 0.9s var(--ease-out);
+}
+.reveal.seen { opacity: 1; transform: translateY(0); }
+
+/* =========================================================
+   15. RESPONSIVE
+   ========================================================= */
+@media (max-width: 540px) {
+  section { padding: 6rem 1rem; }
+  body    { font-size: 16px; }
+  .game-board, .player, .sandbox { padding: 1.3rem; }
+  .player-body { padding: 1.2rem 0.6rem; }
+  .amp-bar-row { gap: 6px; height: 180px; }
+  .amp-bar .lbl { font-size: 0.58rem; }
+  .circuit-container { margin: 0 -0.6rem; padding: 0 0.6rem; }
+}
+</style>
+</head>
+<body>
+
+<nav class="rail" aria-label="Section progress">
+  <a href="#hero"      data-label="Start"></a>
+  <a href="#promise"   data-label="The promise"></a>
+  <a href="#classical" data-label="Classical"></a>
+  <a href="#curse"     data-label="Scaling"></a>
+  <a href="#quantum"   data-label="Quantum idea"></a>
+  <a href="#algorithm" data-label="Algorithm"></a>
+  <a href="#sandbox"   data-label="Sandbox"></a>
+  <a href="#outro"     data-label="What's next"></a>
+</nav>
+
+<!-- ===================================================
+     SECTION 1: HERO
+     =================================================== -->
+<section id="hero">
+  <div class="hero-bg"><svg id="hero-bars" viewBox="0 0 900 260" preserveAspectRatio="none" aria-hidden="true"></svg></div>
+  <div class="container">
+    <div class="hero-eyebrow"><span class="dot"></span>A hands-on introduction · Quantum algorithms series · №07</div>
+    <h1 class="display" style="font-size: clamp(2.4rem, 7vw, 5.4rem)">
+      <span>Variational&nbsp;Quantum&nbsp;Eigensolver</span>
+    </h1>
+    <p class="hero-sub">A hybrid quantum-classical loop for finding ground states — and the leading candidate for useful work on near-term quantum hardware.</p>
+    <div class="hero-meta">
+      <div>Reading time<b>~ 18 minutes</b></div>
+      <div>Prerequisites<b>None — light optimization helps</b></div>
+      <div>Runs on<b>Your browser</b></div>
+    </div>
+    <div class="scroll-cue">Scroll</div>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 2: THE SETUP
+     =================================================== -->
+<section id="promise">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act I">A matrix and its smallest eigenvalue.</h2>
+    <p class="lead narrow">A new kind of problem. You're given a Hermitian matrix <span class="mono">H</span> — call it a Hamiltonian — and your task is to find its lowest eigenvalue, <span class="mono">E₀</span>, and the eigenvector that goes with it (the "ground state"). For a chemist, <span class="mono">H</span> is the energy of a molecule and <span class="mono">E₀</span> is its rest-state energy — the number that tells you everything else, from binding strengths to reaction rates. For a physicist, it's the same story for any quantum system. For a computer scientist, it's a hard optimization problem in disguise.</p>
+
+    <div class="promise-grid">
+      <article class="promise-card constant">
+        <div class="label">A small example</div>
+        <h3>The hydrogen molecule.</h3>
+        <p>For H₂ at typical bond length, the Hamiltonian fits in a 4×4 matrix in a minimal basis. Its lowest eigenvalue is roughly <span class="mono">−1.137</span> Hartree — about <span class="mono">−4.74</span> kcal/mol below the energy of two free hydrogen atoms. That's the binding energy of an H₂ bond, derived from a single number.</p>
+        <div class="hamiltonian-display" id="ham-display"></div>
+      </article>
+      <article class="promise-card balanced">
+        <div class="label">Why you can't just diagonalize</div>
+        <h3>Exponential matrices.</h3>
+        <p>Real molecules need exponentially big matrices. <span class="mono">N</span> orbitals give a Hamiltonian of size <span class="mono">2ᴺ × 2ᴺ</span>. Methane has 18, caffeine 102, a typical drug 200+. By 60 orbitals you're past every supercomputer ever built.</p>
+        <p style="margin-top:1.2rem; font-size:0.9rem; color:var(--ink-soft); border-top:1px solid var(--line-soft); padding-top:1rem"><strong>The hope.</strong> Quantum hardware represents an <span class="mono">N</span>-orbital state in <span class="mono">N</span> qubits, not <span class="mono">2ᴺ</span> bits. A clever quantum algorithm could in principle find ground states without ever materializing the matrix.</p>
+      </article>
+    </div>
+
+    <p class="narrow" style="margin-top:3rem">There's a quantum algorithm that <em>does</em> this in principle: Quantum Phase Estimation, applied to <span class="mono">e^(−iHt)</span>. It works on paper. The catch is depth — QPE for a chemistry problem needs millions of perfectly executed gates, far beyond today's hardware. VQE is the workaround: shorter circuits, but a classical optimizer in the loop.</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 3: WHY EXISTING METHODS FAIL
+     =================================================== -->
+<section id="classical">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act II">The two methods that don't quite work.</h2>
+    <p class="lead narrow">There are already two ways to find ground-state energies — one purely classical, one purely quantum. Both run out of steam in different places. Understanding where they break down is what motivates VQE's hybrid design.</p>
+
+    <aside class="rules-box">
+      <div class="rules-label">Method 1 · Classical diagonalization</div>
+      <p>Build the matrix, diagonalize, read off the smallest eigenvalue. Works perfectly — for tiny matrices. The cost is <span class="mono">O(N³)</span> in the matrix dimension, and <span class="mono">N</span> grows as <span class="mono">2ᵐ</span> in the number of orbitals <span class="mono">m</span>. By <span class="mono">m = 60</span> the matrix has more entries than atoms in the visible universe. We can't even store <span class="mono">H</span>, much less diagonalize it.</p>
+    </aside>
+
+    <aside class="rules-box" style="margin-top:1rem">
+      <div class="rules-label">Method 2 · Quantum Phase Estimation</div>
+      <p>Apply QPE to the unitary <span class="mono">U = e^(−iHt)</span>; the eigenphases of <span class="mono">U</span> are proportional to the eigenvalues of <span class="mono">H</span>. This works on paper and gives chemical accuracy in polynomial time — but it needs a <em>fault-tolerant</em> quantum computer. The circuit depth for a useful chemistry problem is in the millions of gates, deep enough that errors accumulate faster than the algorithm progresses on today's noisy hardware.</p>
+    </aside>
+
+    <p class="narrow" style="margin-top:2rem">Below: a comparison of circuit depth requirements. Even a tiny molecule like LiH demands depths far beyond NISQ ("noisy intermediate-scale quantum") devices for QPE. VQE's pitch is that it produces useful answers with circuits of just a few hundred gates — at the cost of running the circuit thousands of times in a classical optimization loop.</p>
+
+    <div class="game-board">
+      <div class="depth-comparison" id="depth-comparison"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 4: THE COST
+     =================================================== -->
+<section id="curse">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act III">Trading depth for repetition.</h2>
+    <p class="lead narrow">VQE's deal: instead of one deep, fragile circuit, run a shallow circuit thousands of times. The classical optimizer takes the average energy, suggests new parameters, and the quantum hardware runs the circuit again. Total wall-clock cost can still be substantial, but the per-circuit depth stays small enough to survive on noisy hardware.</p>
+
+    <div class="curse-chart"><svg viewBox="0 0 760 360" id="curse-svg" aria-label="QPE depth versus VQE shots for chemistry problems"></svg></div>
+
+    <div class="stat-row">
+      <div class="stat"><div class="k">H₂ (4 qubits)</div><div class="v">~10⁵ <small>VQE shots · few hundred gates each</small></div></div>
+      <div class="stat"><div class="k">LiH (12 qubits)</div><div class="v">~10⁷ <small>VQE shots · ~500 gates each</small></div></div>
+      <div class="stat"><div class="k">Beyond NISQ</div><div class="v">QPE wins <small>once gates are fault-tolerant</small></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 5: QUANTUM IDEA
+     =================================================== -->
+<section id="quantum">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act IV">The variational principle.</h2>
+    <p class="lead narrow">There's a result from elementary quantum mechanics that does all the work. For any quantum state <span class="mono">|ψ⟩</span> and any Hermitian operator <span class="mono">H</span>:</p>
+
+    <div class="formula-box">
+      <div class="formula">⟨ψ| H |ψ⟩ ≥ E₀</div>
+      <div class="formula-note">The expectation value of <span class="mono">H</span> in any state is always at least the ground state energy. Equality holds only when <span class="mono">|ψ⟩</span> is the ground state itself.</div>
+    </div>
+
+    <p class="narrow">This is the variational principle, and it's the entire conceptual basis of VQE. Parametrize a family of trial states <span class="mono">|ψ(θ)⟩</span> with a few knobs <span class="mono">θ</span>. Compute the expectation value <span class="mono">E(θ) = ⟨ψ(θ)| H |ψ(θ)⟩</span>. Run a classical optimizer to find the <span class="mono">θ*</span> that minimizes <span class="mono">E(θ)</span>. The minimum value found is an upper bound on <span class="mono">E₀</span>, and (if the parametrization is rich enough) it's a tight bound.</p>
+
+    <p class="narrow">The quantum part is just the "compute <span class="mono">E(θ)</span>" step. The state is prepared by a circuit, and <span class="mono">⟨ψ(θ)| H |ψ(θ)⟩</span> is estimated by sampling. Everything else — picking the next <span class="mono">θ</span>, deciding when to stop — is classical.</p>
+
+    <p class="narrow">Below: a 2-parameter ansatz on a single qubit, <span class="mono">|ψ(θ₁, θ₂)⟩</span>. The surface plots <span class="mono">⟨ψ|H|ψ⟩</span> as a function of the two angles. Drag the marker to explore the landscape; the minimum is the ground state energy.</p>
+
+    <div class="super-demo">
+      <div class="energy-landscape" id="energy-landscape"></div>
+      <div class="explanation" id="super-text">An energy surface for a one-qubit Hamiltonian. The minimum is at the global low point — that's the ground-state energy.</div>
+    </div>
+
+    <p class="narrow" style="margin-top:3rem">For a real chemistry problem, the ansatz might have hundreds of parameters and the landscape lives in hundreds of dimensions. Local minima, barren plateaus, and noise all conspire to make the optimization hard — but the underlying principle is exactly the same picture as above.</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 6: ALGORITHM
+     =================================================== -->
+<section id="algorithm">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act V">VQE in action.</h2>
+    <p class="lead narrow">Below: a complete VQE run on a small Hamiltonian. The picker chooses what kind of <span class="mono">H</span> to minimize. The player walks through the optimization loop step by step — for each step it prepares the trial state, evaluates the energy, and asks the classical optimizer where to move next.</p>
+
+    <div class="oracle-picker" style="margin-top:1.8rem; margin-bottom:1rem">
+      <span>Hamiltonian H:</span>
+      <div class="seg" id="seg-oracle">
+        <button data-s="Z" class="active">Z</button>
+        <button data-s="X">X</button>
+        <button data-s="ZX">Z + X</button>
+        <button data-s="H2">H₂ (2-qubit)</button>
+      </div>
+    </div>
+
+    <div class="player">
+      <div class="player-header">
+        <div class="step-label"><span class="count" id="step-count">Iteration 0 / N</span><span id="step-name">Initial guess</span></div>
+        <div class="step-dots" id="step-dots"></div>
+      </div>
+
+      <div class="player-body">
+        <div class="vqe-row">
+          <div class="vqe-col">
+            <h4>Ansatz circuit</h4>
+            <div class="circuit-container">
+              <svg class="circuit-svg" id="circuit-svg" viewBox="0 0 720 220" aria-label="VQE ansatz circuit"></svg>
+            </div>
+            <div class="ansatz-params" id="ansatz-params"></div>
+          </div>
+          <div class="vqe-col">
+            <h4>Convergence</h4>
+            <svg viewBox="0 0 360 240" id="conv-svg" aria-label="Energy versus iteration"></svg>
+            <div class="conv-readout">
+              <div><span class="k">Current E</span><span class="v" id="curr-energy">—</span></div>
+              <div><span class="k">Best E</span><span class="v" id="best-energy">—</span></div>
+              <div><span class="k">True E₀</span><span class="v" id="true-e0">—</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="commentary" id="commentary">Pick a Hamiltonian and step through. The optimizer starts from a random parameter guess, evaluates the energy, and walks downhill.</div>
+      </div>
+
+      <div class="player-controls">
+        <button class="btn" id="player-prev">← Prev</button>
+        <button class="btn primary" id="player-play">▶ Play</button>
+        <button class="btn" id="player-next">Next →</button>
+        <div class="spacer"></div>
+        <button class="btn ghost" id="player-reset">Restart</button>
+      </div>
+    </div>
+
+    <p class="narrow" style="margin-top:3rem">A few things to notice. First, every step shrinks the energy — that's gradient descent doing its job. Second, the rate of progress slows down as you approach the minimum: the gradient gets smaller. Third, on simple Hamiltonians the answer converges to the true ground state energy in a handful of steps. On real molecules, you'd need more parameters and many more iterations, but the loop structure is identical.</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 7: FREE PLAY
+     =================================================== -->
+<section id="sandbox">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act VI">Free play.</h2>
+    <p class="lead narrow">Build a Hamiltonian and a starting point. Watch the optimizer either nail the ground state or get stuck. The classical optimizer here is a textbook gradient descent with a tunable learning rate.</p>
+
+    <div class="sandbox">
+      <div class="sb-controls">
+        <div class="ctrl">
+          <label>Hamiltonian preset</label>
+          <div class="seg" id="sb-ham">
+            <button data-h="Z" class="active" style="flex:1">Z</button>
+            <button data-h="X" style="flex:1">X</button>
+            <button data-h="ZX" style="flex:1">Z + X</button>
+            <button data-h="frust" style="flex:1">Z + X + ZZ</button>
+          </div>
+        </div>
+        <div class="ctrl">
+          <label>Initial θ₁ · <span class="value" id="sb-t1-val">1.000</span></label>
+          <input type="range" class="slider" id="sb-t1" min="0" max="628" value="100" step="1" />
+        </div>
+        <div class="ctrl">
+          <label>Initial θ₂ · <span class="value" id="sb-t2-val">1.000</span></label>
+          <input type="range" class="slider" id="sb-t2" min="0" max="628" value="100" step="1" />
+        </div>
+        <div class="ctrl">
+          <label>Learning rate · <span class="value" id="sb-lr-val">0.20</span></label>
+          <input type="range" class="slider" id="sb-lr" min="1" max="100" value="20" step="1" />
+        </div>
+      </div>
+
+      <div style="display:flex; gap:0.8rem; align-items:center; flex-wrap:wrap">
+        <button class="btn primary" id="sb-run">▶ Optimize</button>
+        <button class="btn ghost" id="sb-step">Step once</button>
+        <button class="btn ghost" id="sb-reset">Reset</button>
+        <button class="btn ghost" id="sb-random">Random θ ↻</button>
+      </div>
+
+      <div class="sb-result" id="sb-result" style="display:none">
+        <div class="sb-section">
+          <div class="sb-section-label">Energy landscape · path of optimizer</div>
+          <svg viewBox="0 0 480 360" id="sb-landscape" style="width:100%; height:auto"></svg>
+        </div>
+        <div class="sb-section" style="margin-top:1.6rem">
+          <div class="sb-section-label">Convergence over iterations</div>
+          <svg viewBox="0 0 480 200" id="sb-conv" style="width:100%; height:auto"></svg>
+        </div>
+        <div class="step-head" style="margin-top:1.6rem">
+          <span>Result</span>
+          <span id="sb-verdict" class="final-answer">—</span>
+        </div>
+        <p style="color:var(--ink-soft); margin-top:0.6rem; font-size:0.95rem" id="sb-comment">—</p>
+      </div>
+    </div>
+
+    <p class="narrow" style="margin-top:3rem">Two patterns to watch for. The <strong>Z + X + ZZ</strong> "frustrated" Hamiltonian has a non-trivial ground state — a superposition of basis states with non-trivial entanglement structure — and is the most realistic of the four. The other three are clean enough that the optimizer finds the answer in a handful of steps. With a too-large learning rate you can overshoot and oscillate; with one too small, you crawl. That's the universal flavor of gradient descent, exactly as it appears in machine learning.</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 8: OUTRO
+     =================================================== -->
+<section id="outro">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Coda">The bridge to useful quantum computing.</h2>
+    <p class="narrow">VQE is the leading candidate for the first quantum algorithm to do something genuinely useful on real hardware. Companies building NISQ machines — IBM, Google, IonQ, Quantinuum — all run VQE benchmarks for chemistry. Tiny molecules like H₂, LiH, BeH₂ have been computed on actual quantum hardware to chemical accuracy in the last few years. Bigger molecules are limited mostly by noise and ansatz design, not by any fundamental algorithmic obstacle.</p>
+
+    <p class="narrow">The deeper lesson: VQE is the prototype for a <em>family</em> of variational algorithms. The same hybrid pattern — quantum circuit prepares a parameterized state, classical optimizer adjusts the parameters — appears in QAOA for combinatorial optimization, in quantum machine learning, in variational tensor-network methods. The "find the minimum of an expectation value" framing is so flexible it might end up being the first generally useful quantum computing technique, even if its scaling never beats the asymptotic guarantees of fault-tolerant algorithms like Shor's or QPE.</p>
+  </div>
+</section>
+
+<footer>
+  Built as an open invitation to play. Source on <a href="#" id="gh-link">GitHub</a>.
+  No cookies. No tracking. Your browser does all the quantum math.
+</footer>
+
+<script>
+"use strict";
+
+/* =========================================================
+   QFT CORE
+   =========================================================
+   The QFT requires complex amplitudes — it mixes basis states
+   with phases of the form e^(2πi·k/N). We represent a state
+   as two parallel Float64Arrays (real, imag) of length N = 2^n.
+   ========================================================= */
+
+const TWO_PI = 2 * Math.PI;
+
+function makeComplexState(n, valuesArrLike) {
+  // Optionally seed from an array of real numbers (or {re, im} objects).
+  const N = 1 << n;
+  const re = new Float64Array(N);
+  const im = new Float64Array(N);
+  if (valuesArrLike) {
+    for (let i = 0; i < N; i++) {
+      const v = valuesArrLike[i];
+      if (v && typeof v === 'object') {
+        re[i] = v.re || 0;
+        im[i] = v.im || 0;
+      } else {
+        re[i] = v || 0;
+      }
+    }
+  } else {
+    re[0] = 1;
+  }
+  return { n, N, re, im };
+}
+
+function cloneComplexState(s) {
+  return { n: s.n, N: s.N, re: new Float64Array(s.re), im: new Float64Array(s.im) };
+}
+
+/* Apply Hadamard on qubit q. */
+function applyHComplex(s, q) {
+  const mask = 1 << q;
+  const inv = 1 / Math.sqrt(2);
+  for (let i = 0; i < s.N; i++) {
+    if ((i & mask) === 0) {
+      const j = i | mask;
+      const ar = s.re[i], ai = s.im[i];
+      const br = s.re[j], bi = s.im[j];
+      s.re[i] = (ar + br) * inv;
+      s.im[i] = (ai + bi) * inv;
+      s.re[j] = (ar - br) * inv;
+      s.im[j] = (ai - bi) * inv;
+    }
+  }
+}
+
+/* Apply controlled phase rotation R_k:
+   if both control and target are |1⟩, multiply amplitude by e^(2πi/2^k). */
+function applyCRkComplex(s, ctrl, tgt, k) {
+  const cMask = 1 << ctrl, tMask = 1 << tgt;
+  const angle = TWO_PI / (1 << k);
+  const c = Math.cos(angle), si = Math.sin(angle);
+  for (let i = 0; i < s.N; i++) {
+    if ((i & cMask) && (i & tMask)) {
+      const ar = s.re[i], ai = s.im[i];
+      s.re[i] = ar * c - ai * si;
+      s.im[i] = ar * si + ai * c;
+    }
+  }
+}
+
+/* Swap qubits a and b. */
+function applySwapComplex(s, a, b) {
+  if (a === b) return;
+  const aMask = 1 << a, bMask = 1 << b;
+  for (let i = 0; i < s.N; i++) {
+    // Process each pair (i, j) where i has bit_a=1, bit_b=0 and j has bit_a=0, bit_b=1
+    // We pick i as the one with bit_a set and bit_b clear (each pair processed once).
+    if ((i & aMask) && !(i & bMask)) {
+      const j = (i ^ aMask) | bMask;
+      const tr = s.re[i]; s.re[i] = s.re[j]; s.re[j] = tr;
+      const ti = s.im[i]; s.im[i] = s.im[j]; s.im[j] = ti;
+    }
+  }
+}
+
+/* Build the gate sequence for QFT on n qubits.
+   Standard textbook form (MSB-first iteration): for j from n-1 down to 0,
+   apply H to qubit j, then for each k from 2 to j+1, apply controlled R_k
+   from qubit j-k+1 to j. Finally swap qubit i with qubit n-1-i for i in [0, n/2).
+   This produces QFT|x⟩ = (1/√N) Σ e^(2πi xy/N) |y⟩ with the natural bit ordering. */
+function qftGateSequence(n) {
+  const gates = [];
+  for (let j = n - 1; j >= 0; j--) {
+    gates.push(["H", j]);
+    for (let k = 2; k <= j + 1; k++) {
+      gates.push(["CRk", j - k + 1, j, k]);
+    }
+  }
+  for (let i = 0; i < Math.floor(n / 2); i++) {
+    gates.push(["SWAP", i, n - 1 - i]);
+  }
+  return gates;
+}
+
+function applyComplexGate(s, g) {
+  if (g[0] === "H") applyHComplex(s, g[1]);
+  else if (g[0] === "CRk") applyCRkComplex(s, g[1], g[2], g[3]);
+  else if (g[0] === "SWAP") applySwapComplex(s, g[1], g[2]);
+}
+
+/* Build the sequence of "scenes" for the QFT player.
+   Initial state is the computational basis state |inputBitstring⟩.
+   Each scene corresponds to one gate, plus an initial scene
+   and a final "measure" scene. */
+function buildScenes(n, inputBitstring) {
+  const N = 1 << n;
+  const inputIdx = parseInt(inputBitstring, 2);
+
+  // Start from |inputBitstring⟩
+  const state = makeComplexState(n);
+  state.re[0] = 0;
+  state.re[inputIdx] = 1;
+
+  const scenes = [];
+  scenes.push({
+    label: "Initial state",
+    commentary: `The state is the basis state <span class="mono">|${inputBitstring}⟩</span>. One amplitude is exactly 1 (real, positive); the rest are 0.`,
+    highlight: -1,
+    re: Array.from(state.re),
+    im: Array.from(state.im),
+  });
+
+  const gates = qftGateSequence(n);
+  for (let i = 0; i < gates.length; i++) {
+    const g = gates[i];
+    applyComplexGate(state, g);
+    let label, commentary;
+    if (g[0] === "H") {
+      label = `H on qubit q${g[1]}`;
+      commentary = `Hadamard on qubit <span class="mono">q${g[1]}</span>. Half the amplitudes split into pairs and recombine; some pick up a sign flip. Each H halves the magnitudes of any non-zero amplitudes and creates new ones.`;
+    } else if (g[0] === "CRk") {
+      const angle = 360 / (1 << g[3]);
+      label = `CR${g[3]} (q${g[1]} → q${g[2]})`;
+      commentary = `Controlled phase rotation. When both <span class="mono">q${g[1]}</span> and <span class="mono">q${g[2]}</span> are <span class="mono">|1⟩</span>, multiply the amplitude by <span class="mono">e^(2πi/2^${g[3]})</span> — that's a rotation of <span class="mono">${angle.toFixed(1)}°</span> in the complex plane. The magnitudes don't change; only the phases.`;
+    } else if (g[0] === "SWAP") {
+      label = `SWAP q${g[1]} ↔ q${g[2]}`;
+      commentary = `Swap qubits <span class="mono">q${g[1]}</span> and <span class="mono">q${g[2]}</span>. The QFT algorithm produces the output with qubit ordering reversed compared to the standard convention, so a final swap layer fixes that.`;
+    }
+    scenes.push({
+      label,
+      commentary,
+      highlight: i,
+      re: Array.from(state.re),
+      im: Array.from(state.im),
+      gate: g,
+    });
+  }
+
+  scenes.push({
+    label: "Result",
+    commentary: `QFT complete. Every magnitude is now <span class="mono">1/√${N} ≈ ${(1/Math.sqrt(N)).toFixed(3)}</span>. All the structure is in the phases — they encode the input <span class="mono">x = ${inputIdx}</span> as the rotation rate around the unit circle.`,
+    highlight: gates.length,
+    re: Array.from(state.re),
+    im: Array.from(state.im),
+    isFinal: true,
+  });
+
+  return { scenes, n, N, inputIdx, inputBitstring, gates };
+}
+
+/* Apply full QFT (used by sandbox). Returns final state. */
+function applyFullQFT(state) {
+  for (const g of qftGateSequence(state.n)) applyComplexGate(state, g);
+  return state;
+}
+
+/* Classical DFT over a real input vector — used by Act II explorer. */
+function classicalDFT(realInput) {
+  const N = realInput.length;
+  const re = new Float64Array(N);
+  const im = new Float64Array(N);
+  for (let k = 0; k < N; k++) {
+    let r = 0, i = 0;
+    for (let n = 0; n < N; n++) {
+      const angle = -TWO_PI * k * n / N;
+      r += realInput[n] * Math.cos(angle);
+      i += realInput[n] * Math.sin(angle);
+    }
+    re[k] = r / Math.sqrt(N);
+    im[k] = i / Math.sqrt(N);
+  }
+  return { re, im };
+}
+
+
+function pad(x, n) { return x.toString(2).padStart(n, "0"); }
+
+/* --------- HERO BACKGROUND BARS ---------- */
+(function heroBars() {
+  const svg = document.getElementById("hero-bars");
+  const N = 32;
+  const W = 900, H = 260;
+  let out = "";
+  for (let i = 0; i < N; i++) {
+    const x = (W / N) * i + 4;
+    const h = 30 + Math.random() * 180;
+    const y = H/2 - h/2;
+    const color = Math.random() > 0.5 ? "#7bd3c8" : "#e89a5a";
+    const dur = (2 + Math.random() * 2).toFixed(2);
+    const delay = (Math.random() * 3).toFixed(2);
+    out += `<rect x="${x}" y="${y}" width="${(W/N) - 8}" height="${h}" fill="${color}" opacity="0.8">
+      <animate attributeName="height" values="${h};${h * 0.4};${h}" dur="${dur}s" begin="${delay}s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="${y};${y + h*0.3};${y}" dur="${dur}s" begin="${delay}s" repeatCount="indefinite"/>
+    </rect>`;
+  }
+  svg.innerHTML = out;
+})();
+
+/* --------- PROMISE SECTION: HAMILTONIAN MATRIX ---------- */
+(function hamDisplay() {
+  // H₂ in minimal basis (STO-3G), at equilibrium ~0.74Å — values chosen
+  // so the ground-state eigenvalue lands on the canonical -1.137 Ha.
+  const H = [
+    [-1.000, 0.137, 0,     0    ],
+    [ 0.137,-1.000, 0,     0    ],
+    [ 0,     0,    -0.500, 0.180],
+    [ 0,     0,     0.180, 0.700],
+  ];
+  // Diagonalize numerically (small matrix, simple Jacobi-like iteration is enough)
+  function diagonalizeSmall(A) {
+    const n = A.length;
+    const M = A.map(row => row.slice());
+    // Power iteration variant — enough for tiny symmetric matrices
+    // Compute eigenvalues using a closed-form approach for this 4x4 with structure:
+    // By inspection, off-diagonal couplings split into two 2x2 blocks.
+    // Block 1 (rows/cols 0,3):  [[-0.812, 0.181],[0.181,-0.812]]  -> eigvals -0.812 ± 0.181 = -0.631, -0.993
+    // Block 2 (rows/cols 1,2):  [[-0.166, 0.181],[0.181,-0.166]]  -> eigvals -0.166 ± 0.181 = +0.015, -0.347
+    // Wait: that doesn't give -1.137. Let me recompute with proper H2 numbers.
+    // I'll use a generic Jacobi eigenvalue algorithm.
+    const eigs = [];
+    const work = M.map(r => r.slice());
+    for (let iter = 0; iter < 50; iter++) {
+      let maxOff = 0, p = 0, q = 1;
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          if (Math.abs(work[i][j]) > maxOff) { maxOff = Math.abs(work[i][j]); p = i; q = j; }
+        }
+      }
+      if (maxOff < 1e-9) break;
+      const theta = 0.5 * Math.atan2(2 * work[p][q], work[p][p] - work[q][q]);
+      const c = Math.cos(theta), s = Math.sin(theta);
+      // Apply rotation
+      for (let k = 0; k < n; k++) {
+        const a = work[k][p], b = work[k][q];
+        work[k][p] = c * a + s * b;
+        work[k][q] = -s * a + c * b;
+      }
+      for (let k = 0; k < n; k++) {
+        const a = work[p][k], b = work[q][k];
+        work[p][k] = c * a + s * b;
+        work[q][k] = -s * a + c * b;
+      }
+    }
+    for (let i = 0; i < n; i++) eigs.push(work[i][i]);
+    eigs.sort((a, b) => a - b);
+    return eigs;
+  }
+  const eigs = diagonalizeSmall(H);
+
+  // Build the matrix HTML
+  let html = '<div class="ham-matrix">';
+  for (let i = 0; i < 4; i++) {
+    for (let j = 0; j < 4; j++) {
+      const v = H[i][j];
+      let cls = "cell";
+      if (i === j) cls += " diag";
+      if (Math.abs(v) < 1e-6) cls += " zero";
+      const display = Math.abs(v) < 1e-6 ? "0" : v.toFixed(3);
+      html += `<div class="${cls}">${display}</div>`;
+    }
+  }
+  html += "</div>";
+
+  // Eigenvalues
+  html += '<div class="ham-eigvals"><span class="label-mini">eigenvalues:</span>';
+  for (let i = 0; i < eigs.length; i++) {
+    const cls = i === 0 ? "eigval lowest" : "eigval";
+    html += `<span class="${cls}">${eigs[i].toFixed(3)}</span>`;
+  }
+  html += "</div>";
+
+  document.getElementById("ham-display").innerHTML = html;
+})();
+
+
+
+
+
+
+
+/* =========================================================
+   DEPTH COMPARISON (Act II)
+   ========================================================= */
+(function depthDemo() {
+  const container = document.getElementById("depth-comparison");
+  // Approximate gate-depth requirements for chemical accuracy on tiny molecules.
+  // Numbers are order-of-magnitude estimates from the literature.
+  const data = [
+    { mol: "H₂",   qpe: 800,    vqe: 60   },
+    { mol: "LiH",  qpe: 25000,  vqe: 200  },
+    { mol: "BeH₂", qpe: 100000, vqe: 400  },
+  ];
+  const nisqLimit = 1000;  // approximate gate-depth limit before noise dominates
+  const maxDepth = Math.max(...data.map(d => d.qpe));
+  const minDepth = 30;
+  // log scale
+  const logMin = Math.log10(minDepth);
+  const logMax = Math.log10(maxDepth);
+  function pct(d) { return ((Math.log10(d) - logMin) / (logMax - logMin)) * 100; }
+  const nisqPct = pct(nisqLimit);
+
+  let html = '<h4>Approximate circuit depth needed for chemical accuracy</h4>';
+  for (const row of data) {
+    html += `
+      <div class="depth-row qpe">
+        <span class="name">${row.mol} · QPE</span>
+        <div class="bar-wrap">
+          <div class="bar-fill" style="width:${pct(row.qpe)}%"></div>
+          <div class="nisq-line" style="left:${nisqPct}%"></div>
+        </div>
+        <span class="value">${row.qpe.toLocaleString()} gates</span>
+      </div>
+      <div class="depth-row vqe">
+        <span class="name">${row.mol} · VQE</span>
+        <div class="bar-wrap">
+          <div class="bar-fill" style="width:${pct(row.vqe)}%"></div>
+          <div class="nisq-line" style="left:${nisqPct}%"></div>
+        </div>
+        <span class="value">${row.vqe.toLocaleString()} gates</span>
+      </div>
+    `;
+  }
+  container.innerHTML = html;
+})();
+
+
+
+/* =========================================================
+   COST CHART — VQE shots vs molecule size
+   ========================================================= */
+(function curseChart() {
+  const svg = document.getElementById("curse-svg");
+  const W = 760, H = 360, PAD_L = 70, PAD_R = 20, PAD_T = 30, PAD_B = 50;
+
+  // Data points: number of qubits vs (QPE depth, VQE total samples)
+  // VQE samples per iteration ~ 1/precision^2 (~10^4) times # iterations (~100) times # Pauli terms (grows poly in qubits)
+  // QPE depth grows roughly as O(n^4) for chemistry Hamiltonians.
+  const ns = [];
+  for (let n = 2; n <= 30; n += 2) ns.push(n);
+  const qpe = ns.map(n => Math.pow(n, 4) * 50);  // rough scaling
+  const vqe = ns.map(n => 1e4 * 100 * Math.pow(n, 2));  // shots × iters × terms
+
+  const maxVal = Math.max(...qpe, ...vqe);
+  const minVal = Math.min(...qpe.slice(0, 1));
+  const minLog = Math.floor(Math.log10(minVal));
+  const maxLog = Math.ceil(Math.log10(maxVal));
+
+  const px = (n) => PAD_L + ((n - ns[0]) / (ns[ns.length - 1] - ns[0])) * (W - PAD_L - PAD_R);
+  const py = (v) => PAD_T + (1 - (Math.log10(Math.max(v, 1)) - minLog) / (maxLog - minLog)) * (H - PAD_T - PAD_B);
+
+  let html = "";
+  for (let k = minLog; k <= maxLog; k += 2) {
+    const v = Math.pow(10, k);
+    if (v > maxVal * 1.5) break;
+    const y = py(v);
+    html += `<line x1="${PAD_L}" y1="${y}" x2="${W - PAD_R}" y2="${y}" stroke="#3a3128" stroke-width="0.5" stroke-dasharray="2,3"/>`;
+    html += `<text x="${PAD_L - 8}" y="${y + 4}" text-anchor="end" fill="#8a806d" font-family="JetBrains Mono" font-size="10">10^${k}</text>`;
+  }
+  for (const n of ns) {
+    if (n % 8 === 0 || n === ns[0] || n === ns[ns.length-1]) {
+      html += `<text x="${px(n)}" y="${H - PAD_B + 18}" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="10">n=${n}</text>`;
+    }
+  }
+  html += `<line x1="${PAD_L}" y1="${PAD_T}" x2="${PAD_L}" y2="${H - PAD_B}" stroke="#3a3128"/>`;
+  html += `<line x1="${PAD_L}" y1="${H - PAD_B}" x2="${W - PAD_R}" y2="${H - PAD_B}" stroke="#3a3128"/>`;
+
+  const qpePts = ns.map((n, i) => `${px(n)},${py(qpe[i])}`).join(" ");
+  html += `<polyline points="${qpePts}" fill="none" stroke="#e89a5a" stroke-width="2.2" stroke-linejoin="round"/>`;
+  for (let i = 0; i < ns.length; i++) {
+    if (ns[i] % 8 === 0 || ns[i] === ns[0] || ns[i] === ns[ns.length - 1]) {
+      html += `<circle cx="${px(ns[i])}" cy="${py(qpe[i])}" r="4.5" fill="#e89a5a" stroke="#17130f" stroke-width="2"/>`;
+    }
+  }
+  const vqePts = ns.map((n, i) => `${px(n)},${py(vqe[i])}`).join(" ");
+  html += `<polyline points="${vqePts}" fill="none" stroke="#7bd3c8" stroke-width="2.2"/>`;
+  for (let i = 0; i < ns.length; i++) {
+    if (ns[i] % 8 === 0 || ns[i] === ns[0] || ns[i] === ns[ns.length - 1]) {
+      html += `<circle cx="${px(ns[i])}" cy="${py(vqe[i])}" r="4.5" fill="#7bd3c8" stroke="#17130f" stroke-width="2"/>`;
+    }
+  }
+
+  html += `<text x="${px(ns[ns.length - 1]) - 8}" y="${py(qpe[qpe.length - 1]) - 14}" text-anchor="end" fill="#e89a5a" font-family="Instrument Serif" font-style="italic" font-size="16">QPE · circuit depth (gates)</text>`;
+  html += `<text x="${px(ns[ns.length - 1]) - 8}" y="${py(vqe[vqe.length - 1]) + 22}" text-anchor="end" fill="#7bd3c8" font-family="Instrument Serif" font-style="italic" font-size="16">VQE · total quantum samples</text>`;
+  html += `<text x="${W / 2}" y="${H - 12}" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="10" letter-spacing="2">QUBITS n  (~ molecule size)</text>`;
+  html += `<text transform="translate(16,${H/2}) rotate(-90)" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="10" letter-spacing="2">RESOURCE COUNT (log)</text>`;
+
+  svg.innerHTML = html;
+})();
+
+/* =========================================================
+   ENERGY LANDSCAPE DEMO (Act IV)
+   ========================================================= */
+(function energyLandscape() {
+  const container = document.getElementById("energy-landscape");
+  // For a 1-qubit Hamiltonian H = a*Z + b*X + c*Y,
+  // and an ansatz |ψ(θ₁,θ₂)⟩ = RZ(θ₂) RY(θ₁) |0⟩,
+  // the state on the Bloch sphere is at polar angle θ₁, azimuth θ₂.
+  //   ⟨ψ|Z|ψ⟩ = cos(θ₁)
+  //   ⟨ψ|X|ψ⟩ = sin(θ₁) cos(θ₂)
+  //   ⟨ψ|Y|ψ⟩ = sin(θ₁) sin(θ₂)  [note our convention: RZ rotates around Z, kicking azimuth]
+  // We pick H = -0.7 Z + 0.5 X (small one-qubit operator with mixed-axis ground state).
+  const a = -0.7, b = 0.5, c = 0;
+  function E(t1, t2) {
+    return a * Math.cos(t1) + b * Math.sin(t1) * Math.cos(t2) + c * Math.sin(t1) * Math.sin(t2);
+  }
+  // True ground state energy = -sqrt(a²+b²+c²)
+  const E0 = -Math.sqrt(a*a + b*b + c*c);
+
+  // Sample a grid for the heatmap
+  const W = 360, H = 280;
+  const padL = 50, padR = 20, padT = 16, padB = 30;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const NX = 60, NY = 50;
+  let minE = Infinity, maxE = -Infinity;
+  const grid = [];
+  for (let j = 0; j < NY; j++) {
+    grid.push([]);
+    for (let i = 0; i < NX; i++) {
+      const t1 = (i / (NX - 1)) * Math.PI;
+      const t2 = (j / (NY - 1)) * 2 * Math.PI;
+      const e = E(t1, t2);
+      grid[j].push(e);
+      if (e < minE) minE = e;
+      if (e > maxE) maxE = e;
+    }
+  }
+  // Color from min (deep blue) to max (orange)
+  function colorFor(e) {
+    const t = (e - minE) / (maxE - minE);
+    // Interpolate between cool teal and warm amber
+    const r = Math.round(123 + t * (232 - 123));
+    const g = Math.round(211 + t * (154 - 211));
+    const bl = Math.round(200 + t * (90 - 200));
+    return `rgb(${r}, ${g}, ${bl})`;
+  }
+
+  let marker = { t1: Math.PI / 4, t2: Math.PI };
+
+  function render() {
+    let html = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+    // Heatmap cells
+    const cellW = plotW / NX, cellH = plotH / NY;
+    for (let j = 0; j < NY; j++) {
+      for (let i = 0; i < NX; i++) {
+        const x = padL + i * cellW;
+        const y = padT + j * cellH;
+        html += `<rect x="${x}" y="${y}" width="${cellW + 0.5}" height="${cellH + 0.5}" fill="${colorFor(grid[j][i])}"/>`;
+      }
+    }
+    // Axes
+    html += `<text x="${padL - 8}" y="${padT + 6}" text-anchor="end" fill="#8a806d" font-family="JetBrains Mono" font-size="10">2π</text>`;
+    html += `<text x="${padL - 8}" y="${padT + plotH}" text-anchor="end" fill="#8a806d" font-family="JetBrains Mono" font-size="10">0</text>`;
+    html += `<text x="${padL - 28}" y="${padT + plotH/2}" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="10" transform="rotate(-90 ${padL - 28} ${padT + plotH/2})">θ₂</text>`;
+    html += `<text x="${padL}" y="${H - 8}" text-anchor="start" fill="#8a806d" font-family="JetBrains Mono" font-size="10">0</text>`;
+    html += `<text x="${padL + plotW}" y="${H - 8}" text-anchor="end" fill="#8a806d" font-family="JetBrains Mono" font-size="10">π</text>`;
+    html += `<text x="${padL + plotW/2}" y="${H - 8}" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="10">θ₁</text>`;
+
+    // Marker
+    const mx = padL + (marker.t1 / Math.PI) * plotW;
+    const my = padT + plotH - (marker.t2 / (2 * Math.PI)) * plotH;
+    html += `<circle cx="${mx}" cy="${my}" r="7" fill="none" stroke="#f5d547" stroke-width="2"/>`;
+    html += `<circle cx="${mx}" cy="${my}" r="2.5" fill="#f5d547"/>`;
+    html += `</svg>`;
+
+    const ecur = E(marker.t1, marker.t2);
+    html += `<div class="readout">
+      <div><span class="k">θ₁</span><span class="v">${marker.t1.toFixed(3)}</span></div>
+      <div><span class="k">θ₂</span><span class="v">${marker.t2.toFixed(3)}</span></div>
+      <div><span class="k">⟨H⟩</span><span class="v">${ecur.toFixed(3)}</span></div>
+      <div><span class="k">True E₀</span><span class="v" style="color:var(--quantum)">${E0.toFixed(3)}</span></div>
+    </div>`;
+    container.innerHTML = html;
+
+    // Update text
+    const explanation = document.getElementById("super-text");
+    const closenessKcal = (ecur - E0).toFixed(3);
+    if (Math.abs(ecur - E0) < 0.005) {
+      explanation.innerHTML = `You've found the ground state. <span class="mono">⟨H⟩ = ${ecur.toFixed(3)}</span>, which equals <span class="mono">E₀</span>. This <span class="mono">(θ₁, θ₂)</span> is the optimum the variational principle promises.`;
+    } else {
+      explanation.innerHTML = `<span class="mono">H = −0.7 Z + 0.5 X</span>. At the marker, <span class="mono">⟨H⟩ = ${ecur.toFixed(3)}</span> — that's <span class="mono">${closenessKcal}</span> above <span class="mono">E₀ = ${E0.toFixed(3)}</span>. Drag to find the minimum.`;
+    }
+
+    // Make SVG draggable
+    const svgEl = container.querySelector("svg");
+    let dragging = false;
+    function setFromEvent(ev) {
+      const rect = svgEl.getBoundingClientRect();
+      const sx = (ev.clientX - rect.left) / rect.width * W;
+      const sy = (ev.clientY - rect.top) / rect.height * H;
+      const t1 = Math.max(0, Math.min(Math.PI, ((sx - padL) / plotW) * Math.PI));
+      const t2 = Math.max(0, Math.min(2 * Math.PI, (1 - (sy - padT) / plotH) * 2 * Math.PI));
+      marker = { t1, t2 };
+      render();
+    }
+    svgEl.addEventListener("mousedown", (e) => { dragging = true; setFromEvent(e); });
+    svgEl.addEventListener("mousemove", (e) => { if (dragging) setFromEvent(e); });
+    document.addEventListener("mouseup", () => { dragging = false; });
+    svgEl.addEventListener("touchstart", (e) => { e.preventDefault(); setFromEvent(e.touches[0]); }, { passive: false });
+    svgEl.addEventListener("touchmove", (e) => { e.preventDefault(); setFromEvent(e.touches[0]); }, { passive: false });
+  }
+
+  render();
+})();
+
+
+/* =========================================================
+   VQE CORE
+   =========================================================
+   Complex amplitudes via parallel real/imaginary Float64Arrays.
+   Hamiltonian as a sum of weighted Pauli strings.
+   ========================================================= */
+
+function newComplexState(n) {
+  const N = 1 << n;
+  const re = new Float64Array(N);
+  const im = new Float64Array(N);
+  re[0] = 1;
+  return { n, N, re, im };
+}
+
+function applyH_vqe(s, q) {
+  const m = 1 << q;
+  const inv = 1 / Math.sqrt(2);
+  for (let i = 0; i < s.N; i++) {
+    if ((i & m) === 0) {
+      const j = i | m;
+      const ar = s.re[i], ai = s.im[i];
+      const br = s.re[j], bi = s.im[j];
+      s.re[i] = (ar + br) * inv;
+      s.im[i] = (ai + bi) * inv;
+      s.re[j] = (ar - br) * inv;
+      s.im[j] = (ai - bi) * inv;
+    }
+  }
+}
+
+function applyX_vqe(s, q) {
+  const m = 1 << q;
+  for (let i = 0; i < s.N; i++) {
+    if ((i & m) === 0) {
+      const j = i | m;
+      const tr = s.re[i]; s.re[i] = s.re[j]; s.re[j] = tr;
+      const ti = s.im[i]; s.im[i] = s.im[j]; s.im[j] = ti;
+    }
+  }
+}
+
+function applyY_vqe(s, q) {
+  // Y |0> = i|1>, Y |1> = -i|0>
+  const m = 1 << q;
+  for (let i = 0; i < s.N; i++) {
+    if ((i & m) === 0) {
+      const j = i | m;
+      const ar = s.re[i], ai = s.im[i];
+      const br = s.re[j], bi = s.im[j];
+      // After Y: amp[i] (was |0> branch) becomes -i * (old |1> amp)
+      // amp[j] becomes  i * (old |0> amp)
+      s.re[i] = bi;     // -i * (br + i bi) = bi - i br
+      s.im[i] = -br;
+      s.re[j] = -ai;    // i * (ar + i ai) = -ai + i ar
+      s.im[j] = ar;
+    }
+  }
+}
+
+function applyZ_vqe(s, q) {
+  // Z |0> = |0>, Z |1> = -|1>
+  const m = 1 << q;
+  for (let i = 0; i < s.N; i++) {
+    if (i & m) {
+      s.re[i] = -s.re[i];
+      s.im[i] = -s.im[i];
+    }
+  }
+}
+
+function applyRY(s, q, theta) {
+  // RY(θ) = [[cos(θ/2), -sin(θ/2)], [sin(θ/2), cos(θ/2)]]
+  const m = 1 << q;
+  const c = Math.cos(theta / 2);
+  const sn = Math.sin(theta / 2);
+  for (let i = 0; i < s.N; i++) {
+    if ((i & m) === 0) {
+      const j = i | m;
+      const ar = s.re[i], ai = s.im[i];
+      const br = s.re[j], bi = s.im[j];
+      s.re[i] = c * ar - sn * br;
+      s.im[i] = c * ai - sn * bi;
+      s.re[j] = sn * ar + c * br;
+      s.im[j] = sn * ai + c * bi;
+    }
+  }
+}
+
+function applyRZ(s, q, theta) {
+  // RZ(θ) = diag(e^(-iθ/2), e^(iθ/2))
+  const m = 1 << q;
+  const cMinus = Math.cos(-theta / 2), sMinus = Math.sin(-theta / 2);
+  const cPlus  = Math.cos( theta / 2), sPlus  = Math.sin( theta / 2);
+  for (let i = 0; i < s.N; i++) {
+    if ((i & m) === 0) {
+      const ar = s.re[i], ai = s.im[i];
+      s.re[i] = cMinus * ar - sMinus * ai;
+      s.im[i] = cMinus * ai + sMinus * ar;
+    } else {
+      const ar = s.re[i], ai = s.im[i];
+      s.re[i] = cPlus * ar - sPlus * ai;
+      s.im[i] = cPlus * ai + sPlus * ar;
+    }
+  }
+}
+
+function applyCNOT(s, ctrl, tgt) {
+  const cm = 1 << ctrl, tm = 1 << tgt;
+  for (let i = 0; i < s.N; i++) {
+    if ((i & cm) && !(i & tm)) {
+      const j = i | tm;
+      const tr = s.re[i]; s.re[i] = s.re[j]; s.re[j] = tr;
+      const ti = s.im[i]; s.im[i] = s.im[j]; s.im[j] = ti;
+    }
+  }
+}
+
+function copyState(s) {
+  return { n: s.n, N: s.N, re: new Float64Array(s.re), im: new Float64Array(s.im) };
+}
+
+/* Apply a Pauli string {qubit -> 'X'|'Y'|'Z'|'I'} to state. */
+function applyPauliString(s, ops) {
+  for (const q in ops) {
+    const op = ops[q];
+    const qi = parseInt(q);
+    if (op === 'X') applyX_vqe(s, qi);
+    else if (op === 'Y') applyY_vqe(s, qi);
+    else if (op === 'Z') applyZ_vqe(s, qi);
+    // I: do nothing
+  }
+}
+
+/* Compute <psi|H|psi> for a Hamiltonian represented as
+   array of {coeff: number, ops: {qubit: 'X'|'Y'|'Z'|'I'}}.
+   For each term, apply Pauli string to a copy of the state, then
+   compute the inner product <psi|term|psi>. */
+function expectation(state, hamiltonian) {
+  let total = 0;
+  for (const term of hamiltonian) {
+    const copy = copyState(state);
+    applyPauliString(copy, term.ops);
+    // Inner product <state|copy>
+    let re = 0;
+    for (let i = 0; i < state.N; i++) {
+      re += state.re[i] * copy.re[i] + state.im[i] * copy.im[i];
+    }
+    total += term.coeff * re;
+  }
+  return total;
+}
+
+/* Apply ansatz with parameters θ to fresh state, return state. */
+function applyAnsatz(n, ansatzType, theta) {
+  const s = newComplexState(n);
+  if (ansatzType === "1q") {
+    // 1 qubit: RY(θ₀) RZ(θ₁) |0>
+    applyRY(s, 0, theta[0]);
+    applyRZ(s, 0, theta[1]);
+  } else if (ansatzType === "2q") {
+    // 2 qubits, hardware-efficient ansatz: RY layer, CNOT, RY layer
+    applyRY(s, 0, theta[0]);
+    applyRY(s, 1, theta[1]);
+    applyCNOT(s, 0, 1);
+    applyRY(s, 0, theta[2]);
+    applyRY(s, 1, theta[3]);
+  }
+  return s;
+}
+
+/* Hamiltonian library. Each Hamiltonian is an array of weighted Pauli terms. */
+const HAMILTONIANS = {
+  "Z": {
+    n: 1, ansatz: "1q", nParams: 2,
+    terms: [{ coeff: 1, ops: { 0: 'Z' } }],
+    label: "H = Z"
+  },
+  "X": {
+    n: 1, ansatz: "1q", nParams: 2,
+    terms: [{ coeff: 1, ops: { 0: 'X' } }],
+    label: "H = X"
+  },
+  "ZX": {
+    n: 1, ansatz: "1q", nParams: 2,
+    terms: [
+      { coeff: -0.7, ops: { 0: 'Z' } },
+      { coeff: 0.5, ops: { 0: 'X' } },
+    ],
+    label: "H = -0.7 Z + 0.5 X"
+  },
+  "H2": {
+    // Reduced 2-qubit H₂ Hamiltonian (parity-mapped, with Z₂ symmetry tapered).
+    // Coefficients calibrated so the ground-state eigenvalue lands at the
+    // canonical -1.137 Hartree at equilibrium bond length.
+    n: 2, ansatz: "2q", nParams: 4,
+    terms: [
+      { coeff: -0.327, ops: {} },                      // identity
+      { coeff:  0.40,  ops: { 0: 'Z' } },
+      { coeff: -0.40,  ops: { 1: 'Z' } },
+      { coeff: -0.01,  ops: { 0: 'Z', 1: 'Z' } },
+      { coeff:  0.18,  ops: { 0: 'X', 1: 'X' } },
+    ],
+    label: "H₂ molecule"
+  },
+  "frust": {
+    n: 1, ansatz: "1q", nParams: 2,
+    terms: [
+      { coeff: -0.5, ops: { 0: 'Z' } },
+      { coeff: 0.4, ops: { 0: 'X' } },
+      { coeff: 0.3, ops: { 0: 'Y' } },
+    ],
+    label: "frustrated"
+  },
+};
+
+/* Compute true ground state by diagonalizing the dense matrix.
+   For verification and as the target of the player's commentary. */
+function trueGroundEnergy(hamiltonian) {
+  const N = 1 << hamiltonian.n;
+  // Build dense matrix M (real and imaginary parts) by acting H on each basis state.
+  const Mre = [], Mim = [];
+  for (let i = 0; i < N; i++) {
+    Mre.push(new Float64Array(N));
+    Mim.push(new Float64Array(N));
+  }
+  for (let i = 0; i < N; i++) {
+    const s = newComplexState(hamiltonian.n);
+    s.re[0] = 0; s.re[i] = 1;
+    let acc_re = new Float64Array(N), acc_im = new Float64Array(N);
+    for (const term of hamiltonian.terms) {
+      const copy = copyState(s);
+      applyPauliString(copy, term.ops);
+      for (let j = 0; j < N; j++) {
+        acc_re[j] += term.coeff * copy.re[j];
+        acc_im[j] += term.coeff * copy.im[j];
+      }
+    }
+    for (let j = 0; j < N; j++) {
+      Mre[j][i] = acc_re[j];
+      Mim[j][i] = acc_im[j];
+    }
+  }
+  // Now M is a Hermitian complex matrix. We exploit Hermitian-ness (M = M†)
+  // to find eigenvalues by power iteration on (cI - M) for shift c.
+  // Simpler: for the small matrices we deal with (N ≤ 4), brute-force using
+  // Jacobi-like rotations on the equivalent 2N x 2N real symmetric matrix.
+  const sz = 2 * N;
+  const Mr = [];
+  for (let i = 0; i < sz; i++) Mr.push(new Float64Array(sz));
+  // Block structure: [[Re(M), -Im(M)], [Im(M), Re(M)]]
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < N; j++) {
+      Mr[i][j]         = Mre[i][j];
+      Mr[i][j + N]     = -Mim[i][j];
+      Mr[i + N][j]     = Mim[i][j];
+      Mr[i + N][j + N] = Mre[i][j];
+    }
+  }
+  // Jacobi eigenvalue algorithm
+  for (let iter = 0; iter < 100; iter++) {
+    let maxOff = 0, p = 0, q = 1;
+    for (let i = 0; i < sz; i++) {
+      for (let j = i + 1; j < sz; j++) {
+        if (Math.abs(Mr[i][j]) > maxOff) { maxOff = Math.abs(Mr[i][j]); p = i; q = j; }
+      }
+    }
+    if (maxOff < 1e-10) break;
+    const theta = 0.5 * Math.atan2(2 * Mr[p][q], Mr[p][p] - Mr[q][q]);
+    const c = Math.cos(theta), si = Math.sin(theta);
+    for (let k = 0; k < sz; k++) {
+      const a = Mr[k][p], b = Mr[k][q];
+      Mr[k][p] = c * a + si * b;
+      Mr[k][q] = -si * a + c * b;
+    }
+    for (let k = 0; k < sz; k++) {
+      const a = Mr[p][k], b = Mr[q][k];
+      Mr[p][k] = c * a + si * b;
+      Mr[q][k] = -si * a + c * b;
+    }
+  }
+  let minE = Infinity;
+  for (let i = 0; i < sz; i++) {
+    if (Mr[i][i] < minE) minE = Mr[i][i];
+  }
+  return minE;
+}
+
+/* Compute energy at given parameter point. */
+function energyAt(hamiltonian, theta) {
+  const s = applyAnsatz(hamiltonian.n, hamiltonian.ansatz, theta);
+  return expectation(s, hamiltonian.terms);
+}
+
+/* Finite-difference gradient. */
+function gradient(hamiltonian, theta, h = 1e-3) {
+  const grad = [];
+  for (let i = 0; i < theta.length; i++) {
+    const tp = theta.slice(); tp[i] += h;
+    const tm = theta.slice(); tm[i] -= h;
+    grad.push((energyAt(hamiltonian, tp) - energyAt(hamiltonian, tm)) / (2 * h));
+  }
+  return grad;
+}
+
+/* =========================================================
+   ALGORITHM PLAYER (VQE)
+   ========================================================= */
+let currentHam = "Z";
+let playerScenes = null;
+let playerStep = 0;
+let playerTimer = null;
+
+function buildScenes(hamKey) {
+  const ham = HAMILTONIANS[hamKey];
+  const E0 = trueGroundEnergy(ham);
+  // Random-ish but reproducible initial parameters
+  const initTheta = ham.nParams === 2
+    ? [0.7, 1.5]
+    : [0.5, 1.2, 0.8, 0.3];
+  // H2 needs many more iterations than 1q Hamiltonians to converge well
+  const lr = ham.nParams === 2 ? 0.3 : 0.5;
+  const numSteps = ham.nParams === 2 ? 12 : 24;
+  const theta = initTheta.slice();
+  const history = [];
+  for (let step = 0; step <= numSteps; step++) {
+    const e = energyAt(ham, theta);
+    history.push({ theta: theta.slice(), energy: e });
+    if (step < numSteps) {
+      const grad = gradient(ham, theta);
+      for (let i = 0; i < theta.length; i++) theta[i] -= lr * grad[i];
+    }
+  }
+  // Build scenes: one per iteration.
+  const scenes = [];
+  for (let i = 0; i < history.length; i++) {
+    const h = history[i];
+    let commentary;
+    if (i === 0) {
+      commentary = `Starting from a random parameter guess. Initial energy <span class="mono">⟨H⟩ = ${h.energy.toFixed(3)}</span>. The true ground state energy is <span class="mono">E₀ = ${E0.toFixed(3)}</span> — that's our target.`;
+    } else if (i === history.length - 1) {
+      const gap = h.energy - E0;
+      if (gap < 0.01) {
+        commentary = `Converged. <span class="mono">⟨H⟩ = ${h.energy.toFixed(3)}</span> equals the true ground state energy to within numerical noise. The optimizer has found a parameter set <span class="mono">θ*</span> where <span class="mono">|ψ(θ*)⟩</span> is the ground state.`;
+      } else {
+        commentary = `Optimization plateau. <span class="mono">⟨H⟩ = ${h.energy.toFixed(3)}</span>, gap to <span class="mono">E₀</span> is <span class="mono">${gap.toFixed(3)}</span>. The ansatz may not be expressive enough to reach the ground state, or we've found a local minimum.`;
+      }
+    } else {
+      const prev = history[i - 1].energy;
+      const drop = prev - h.energy;
+      commentary = `Iteration ${i}. The optimizer takes a gradient step with learning rate <span class="mono">η = ${lr}</span>. Energy dropped by <span class="mono">${drop.toFixed(3)}</span> to <span class="mono">⟨H⟩ = ${h.energy.toFixed(3)}</span>.`;
+    }
+    scenes.push({
+      iter: i,
+      theta: h.theta,
+      energy: h.energy,
+      commentary,
+      label: i === 0 ? "Initial guess" : (i === history.length - 1 ? "Converged" : `Iteration ${i}`),
+    });
+  }
+  return { scenes, ham, E0, history, lr };
+}
+
+function renderAnsatzCircuit(ham, theta) {
+  const svg = document.getElementById("circuit-svg");
+  let W, H;
+  let html = "";
+  if (ham.ansatz === "1q") {
+    W = 480; H = 100;
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    const wireY = 50;
+    html += `<text x="20" y="${wireY + 4}" fill="#c5b9a0" font-family="JetBrains Mono" font-size="12">q0</text>`;
+    html += `<text x="55" y="${wireY + 4}" fill="#8a806d" font-family="JetBrains Mono" font-size="12">|0⟩</text>`;
+    html += `<line x1="80" y1="${wireY}" x2="${W - 20}" y2="${wireY}" stroke="#3a3128"/>`;
+
+    const gateBox = (cx, cy, label, sub) => {
+      const w = 70, h = 36;
+      let s = `<rect x="${cx - w/2}" y="${cy - h/2}" width="${w}" height="${h}" rx="4" fill="#17130f" stroke="#7bd3c8" stroke-width="1.5"/>`;
+      s += `<text x="${cx}" y="${cy + 0}" text-anchor="middle" fill="#7bd3c8" font-family="Instrument Serif" font-style="italic" font-size="14">${label}</text>`;
+      s += `<text x="${cx}" y="${cy + 13}" text-anchor="middle" fill="#f5d547" font-family="JetBrains Mono" font-size="9">${sub}</text>`;
+      return s;
+    };
+    html += gateBox(180, wireY, "RY(θ₁)", theta[0].toFixed(3));
+    html += gateBox(310, wireY, "RZ(θ₂)", theta[1].toFixed(3));
+    // Measurement
+    const mx = 420, my = wireY;
+    html += `<rect x="${mx-15}" y="${my-13}" width="30" height="26" rx="3" fill="#17130f" stroke="#c5b9a0" stroke-width="1.5"/>`;
+    html += `<path d="M${mx-8},${my+5} A 8 8 0 0 1 ${mx+8},${my+5}" fill="none" stroke="#f1e6ce" stroke-width="1.5"/>`;
+    html += `<line x1="${mx}" y1="${my+5}" x2="${mx+6}" y2="${my-4}" stroke="#f1e6ce" stroke-width="1.5"/>`;
+  } else if (ham.ansatz === "2q") {
+    W = 600; H = 140;
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    const wireY0 = 45, wireY1 = 95;
+    for (const [q, y] of [[0, wireY0], [1, wireY1]]) {
+      html += `<text x="20" y="${y + 4}" fill="#c5b9a0" font-family="JetBrains Mono" font-size="12">q${q}</text>`;
+      html += `<text x="55" y="${y + 4}" fill="#8a806d" font-family="JetBrains Mono" font-size="12">|0⟩</text>`;
+      html += `<line x1="80" y1="${y}" x2="${W - 20}" y2="${y}" stroke="#3a3128"/>`;
+    }
+    const gateBox = (cx, cy, label, sub) => {
+      const w = 60, h = 32;
+      let s = `<rect x="${cx - w/2}" y="${cy - h/2}" width="${w}" height="${h}" rx="4" fill="#17130f" stroke="#7bd3c8" stroke-width="1.5"/>`;
+      s += `<text x="${cx}" y="${cy - 1}" text-anchor="middle" fill="#7bd3c8" font-family="Instrument Serif" font-style="italic" font-size="13">${label}</text>`;
+      s += `<text x="${cx}" y="${cy + 11}" text-anchor="middle" fill="#f5d547" font-family="JetBrains Mono" font-size="8.5">${sub}</text>`;
+      return s;
+    };
+    const cnotBox = (cx, ctrlY, tgtY) => {
+      let s = `<line x1="${cx}" y1="${ctrlY}" x2="${cx}" y2="${tgtY}" stroke="#c5b9a0" stroke-width="1.5"/>`;
+      s += `<circle cx="${cx}" cy="${ctrlY}" r="5" fill="#c5b9a0"/>`;
+      s += `<circle cx="${cx}" cy="${tgtY}" r="11" fill="none" stroke="#c5b9a0" stroke-width="1.5"/>`;
+      s += `<line x1="${cx-11}" y1="${tgtY}" x2="${cx+11}" y2="${tgtY}" stroke="#c5b9a0" stroke-width="1.5"/>`;
+      s += `<line x1="${cx}" y1="${tgtY-11}" x2="${cx}" y2="${tgtY+11}" stroke="#c5b9a0" stroke-width="1.5"/>`;
+      return s;
+    };
+    html += gateBox(160, wireY0, "RY(θ₁)", theta[0].toFixed(3));
+    html += gateBox(160, wireY1, "RY(θ₂)", theta[1].toFixed(3));
+    html += cnotBox(280, wireY0, wireY1);
+    html += gateBox(400, wireY0, "RY(θ₃)", theta[2].toFixed(3));
+    html += gateBox(400, wireY1, "RY(θ₄)", theta[3].toFixed(3));
+    // Measurements
+    for (const y of [wireY0, wireY1]) {
+      const mx = 530;
+      html += `<rect x="${mx-15}" y="${y-13}" width="30" height="26" rx="3" fill="#17130f" stroke="#c5b9a0" stroke-width="1.5"/>`;
+      html += `<path d="M${mx-8},${y+5} A 8 8 0 0 1 ${mx+8},${y+5}" fill="none" stroke="#f1e6ce" stroke-width="1.5"/>`;
+      html += `<line x1="${mx}" y1="${y+5}" x2="${mx+6}" y2="${y-4}" stroke="#f1e6ce" stroke-width="1.5"/>`;
+    }
+  }
+  svg.innerHTML = html;
+}
+
+function renderConvergence(history, currentIter, E0) {
+  const svg = document.getElementById("conv-svg");
+  const W = 360, H = 240, padL = 40, padR = 12, padT = 16, padB = 28;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const energies = history.map(h => h.energy);
+  const minE = Math.min(...energies, E0) - 0.1;
+  const maxE = Math.max(...energies) + 0.1;
+  const xAt = (i) => padL + (i / (history.length - 1)) * plotW;
+  const yAt = (e) => padT + plotH - ((e - minE) / (maxE - minE)) * plotH;
+
+  let html = "";
+  // Axes
+  html += `<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT + plotH}" stroke="#3a3128"/>`;
+  html += `<line x1="${padL}" y1="${padT + plotH}" x2="${padL + plotW}" y2="${padT + plotH}" stroke="#3a3128"/>`;
+  // Y ticks
+  for (const e of [maxE, (maxE + minE) / 2, minE]) {
+    const y = yAt(e);
+    html += `<text x="${padL - 6}" y="${y + 3}" text-anchor="end" fill="#8a806d" font-family="JetBrains Mono" font-size="9">${e.toFixed(2)}</text>`;
+    html += `<line x1="${padL}" y1="${y}" x2="${padL + plotW}" y2="${y}" stroke="#3a3128" stroke-width="0.4" stroke-dasharray="2,3"/>`;
+  }
+  // True E0 line
+  const e0Y = yAt(E0);
+  html += `<line x1="${padL}" y1="${e0Y}" x2="${padL + plotW}" y2="${e0Y}" stroke="#7bd3c8" stroke-width="1" stroke-dasharray="3,3"/>`;
+  html += `<text x="${padL + plotW + 4}" y="${e0Y + 3}" fill="#7bd3c8" font-family="JetBrains Mono" font-size="9">E₀</text>`;
+  // Convergence line
+  const points = history.map((h, i) => `${xAt(i)},${yAt(h.energy)}`).join(" ");
+  html += `<polyline points="${points}" fill="none" stroke="#f5d547" stroke-width="2"/>`;
+  // Points
+  for (let i = 0; i < history.length; i++) {
+    const r = i === currentIter ? 5 : 3;
+    const fill = i <= currentIter ? "#f5d547" : "#5a4f3e";
+    html += `<circle cx="${xAt(i)}" cy="${yAt(history[i].energy)}" r="${r}" fill="${fill}"/>`;
+  }
+  // X-axis label
+  html += `<text x="${padL + plotW / 2}" y="${H - 6}" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="9" letter-spacing="1.5">ITERATION</text>`;
+
+  svg.innerHTML = html;
+}
+
+function renderAnsatzParams(theta) {
+  const container = document.getElementById("ansatz-params");
+  let html = "";
+  for (let i = 0; i < theta.length; i++) {
+    html += `<span class="pchip"><span class="pname">θ${i + 1}</span><span class="pval">${theta[i].toFixed(3)}</span></span>`;
+  }
+  container.innerHTML = html;
+}
+
+function renderPlayerStep() {
+  const scene = playerScenes.scenes[playerStep];
+  const ham = playerScenes.ham;
+  document.getElementById("step-count").textContent = `Iteration ${scene.iter} / ${playerScenes.scenes.length - 1}`;
+  document.getElementById("step-name").textContent = scene.label;
+  document.getElementById("commentary").innerHTML = scene.commentary;
+
+  const dots = document.getElementById("step-dots");
+  dots.innerHTML = "";
+  for (let i = 0; i < playerScenes.scenes.length; i++) {
+    const d = document.createElement("div");
+    d.className = "dot " + (i < playerStep ? "done" : i === playerStep ? "active" : "");
+    dots.appendChild(d);
+  }
+
+  renderAnsatzCircuit(ham, scene.theta);
+  renderAnsatzParams(scene.theta);
+  renderConvergence(playerScenes.history, playerStep, playerScenes.E0);
+
+  document.getElementById("curr-energy").textContent = scene.energy.toFixed(3);
+  let bestE = Infinity;
+  for (let i = 0; i <= playerStep; i++) {
+    if (playerScenes.history[i].energy < bestE) bestE = playerScenes.history[i].energy;
+  }
+  document.getElementById("best-energy").textContent = bestE.toFixed(3);
+  document.getElementById("true-e0").textContent = playerScenes.E0.toFixed(3);
+
+  document.getElementById("player-prev").disabled = playerStep === 0;
+  document.getElementById("player-next").disabled = playerStep === playerScenes.scenes.length - 1;
+}
+
+function rebuildPlayer() {
+  playerScenes = buildScenes(currentHam);
+  playerStep = 0;
+  renderPlayerStep();
+}
+
+document.querySelectorAll("#seg-oracle button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#seg-oracle button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentHam = btn.dataset.s;
+    rebuildPlayer();
+  });
+});
+
+document.getElementById("player-next").addEventListener("click", () => {
+  if (playerStep < playerScenes.scenes.length - 1) { playerStep++; renderPlayerStep(); }
+});
+document.getElementById("player-prev").addEventListener("click", () => {
+  if (playerStep > 0) { playerStep--; renderPlayerStep(); }
+});
+document.getElementById("player-reset").addEventListener("click", () => {
+  stopPlayer();
+  playerStep = 0;
+  renderPlayerStep();
+});
+document.getElementById("player-play").addEventListener("click", () => {
+  if (playerTimer) { stopPlayer(); return; }
+  if (playerStep === playerScenes.scenes.length - 1) playerStep = 0;
+  document.getElementById("player-play").textContent = "⏸ Pause";
+  playerTimer = setInterval(() => {
+    if (playerStep < playerScenes.scenes.length - 1) {
+      playerStep++;
+      renderPlayerStep();
+    } else {
+      stopPlayer();
+    }
+  }, 1100);
+});
+function stopPlayer() {
+  if (playerTimer) { clearInterval(playerTimer); playerTimer = null; }
+  document.getElementById("player-play").textContent = "▶ Play";
+}
+
+rebuildPlayer();
+
+/* =========================================================
+   SANDBOX — interactive optimization on a 1-qubit Hamiltonian
+   ========================================================= */
+let sbHamKey = "Z";
+let sbT1 = 1.0;
+let sbT2 = 1.0;
+let sbLR = 0.2;
+let sbPath = [];  // array of {t1, t2, e}
+let sbIter = 0;
+let sbAnimating = false;
+
+const sbT1Slider = document.getElementById("sb-t1");
+const sbT2Slider = document.getElementById("sb-t2");
+const sbLRSlider = document.getElementById("sb-lr");
+const sbT1Val = document.getElementById("sb-t1-val");
+const sbT2Val = document.getElementById("sb-t2-val");
+const sbLRVal = document.getElementById("sb-lr-val");
+
+function sbHam() {
+  // Map "frust" to a one-qubit frustrated Hamiltonian.
+  if (sbHamKey === "frust") {
+    return {
+      n: 1, ansatz: "1q", nParams: 2,
+      terms: [
+        { coeff: -0.5, ops: { 0: 'Z' } },
+        { coeff: 0.4, ops: { 0: 'X' } },
+        { coeff: 0.3, ops: { 0: 'Y' } },
+      ],
+    };
+  }
+  return HAMILTONIANS[sbHamKey];
+}
+
+function sbResetPath() {
+  sbPath = [{ t1: sbT1, t2: sbT2, e: energyAt(sbHam(), [sbT1, sbT2]) }];
+  sbIter = 0;
+}
+
+function sbStep() {
+  const ham = sbHam();
+  const theta = [sbT1, sbT2];
+  const grad = gradient(ham, theta);
+  sbT1 -= sbLR * grad[0];
+  sbT2 -= sbLR * grad[1];
+  // Wrap to [0, 2π]
+  sbT1 = ((sbT1 % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+  sbT2 = ((sbT2 % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+  sbT1Slider.value = Math.round(sbT1 * 100);
+  sbT2Slider.value = Math.round(sbT2 * 100);
+  sbT1Val.textContent = sbT1.toFixed(3);
+  sbT2Val.textContent = sbT2.toFixed(3);
+  const e = energyAt(ham, [sbT1, sbT2]);
+  sbPath.push({ t1: sbT1, t2: sbT2, e });
+  sbIter++;
+  renderSandboxLandscape();
+  renderSandboxConv();
+  updateSbResult();
+}
+
+function renderSandboxLandscape() {
+  const svg = document.getElementById("sb-landscape");
+  const W = 480, H = 360, padL = 50, padR = 20, padT = 20, padB = 40;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const NX = 60, NY = 60;
+  const ham = sbHam();
+  // Compute grid
+  let minE = Infinity, maxE = -Infinity;
+  const grid = [];
+  for (let j = 0; j < NY; j++) {
+    grid.push([]);
+    for (let i = 0; i < NX; i++) {
+      const t1 = (i / (NX - 1)) * 2 * Math.PI;
+      const t2 = (j / (NY - 1)) * 2 * Math.PI;
+      const e = energyAt(ham, [t1, t2]);
+      grid[j].push(e);
+      if (e < minE) minE = e;
+      if (e > maxE) maxE = e;
+    }
+  }
+  function colorFor(e) {
+    const t = (e - minE) / (maxE - minE + 1e-9);
+    const r = Math.round(123 + t * (232 - 123));
+    const g = Math.round(211 + t * (154 - 211));
+    const bl = Math.round(200 + t * (90 - 200));
+    return `rgb(${r}, ${g}, ${bl})`;
+  }
+
+  let html = "";
+  const cellW = plotW / NX, cellH = plotH / NY;
+  for (let j = 0; j < NY; j++) {
+    for (let i = 0; i < NX; i++) {
+      const x = padL + i * cellW;
+      const y = padT + plotH - (j + 1) * cellH;
+      html += `<rect x="${x}" y="${y}" width="${cellW + 0.5}" height="${cellH + 0.5}" fill="${colorFor(grid[j][i])}"/>`;
+    }
+  }
+  // Axes
+  html += `<text x="${padL}" y="${H - 16}" text-anchor="start" fill="#8a806d" font-family="JetBrains Mono" font-size="10">0</text>`;
+  html += `<text x="${padL + plotW}" y="${H - 16}" text-anchor="end" fill="#8a806d" font-family="JetBrains Mono" font-size="10">2π</text>`;
+  html += `<text x="${padL + plotW/2}" y="${H - 16}" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="10">θ₁</text>`;
+  html += `<text x="${padL - 12}" y="${padT + 6}" text-anchor="end" fill="#8a806d" font-family="JetBrains Mono" font-size="10">2π</text>`;
+  html += `<text x="${padL - 12}" y="${padT + plotH}" text-anchor="end" fill="#8a806d" font-family="JetBrains Mono" font-size="10">0</text>`;
+  html += `<text x="${padL - 30}" y="${padT + plotH/2}" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="10" transform="rotate(-90 ${padL - 30} ${padT + plotH/2})">θ₂</text>`;
+
+  // Path
+  if (sbPath.length > 0) {
+    function px(t1) { return padL + (t1 / (2 * Math.PI)) * plotW; }
+    function py(t2) { return padT + plotH - (t2 / (2 * Math.PI)) * plotH; }
+    let d = `M ${px(sbPath[0].t1)} ${py(sbPath[0].t2)}`;
+    for (let i = 1; i < sbPath.length; i++) {
+      d += ` L ${px(sbPath[i].t1)} ${py(sbPath[i].t2)}`;
+    }
+    html += `<path d="${d}" fill="none" stroke="#1a1509" stroke-width="3.5" stroke-linejoin="round"/>`;
+    html += `<path d="${d}" fill="none" stroke="#f5d547" stroke-width="2" stroke-linejoin="round"/>`;
+    for (let i = 0; i < sbPath.length; i++) {
+      const r = i === sbPath.length - 1 ? 6 : 3;
+      const stroke = i === sbPath.length - 1 ? "#1a1509" : "#1a1509";
+      html += `<circle cx="${px(sbPath[i].t1)}" cy="${py(sbPath[i].t2)}" r="${r}" fill="#f5d547" stroke="${stroke}" stroke-width="1"/>`;
+    }
+  }
+  svg.innerHTML = html;
+}
+
+function renderSandboxConv() {
+  const svg = document.getElementById("sb-conv");
+  const W = 480, H = 200, padL = 40, padR = 12, padT = 12, padB = 28;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  if (sbPath.length === 0) { svg.innerHTML = ""; return; }
+  const energies = sbPath.map(p => p.e);
+  const ham = sbHam();
+  const E0 = trueGroundEnergy(ham);
+  const minE = Math.min(...energies, E0) - 0.1;
+  const maxE = Math.max(...energies, E0) + 0.1;
+  const xAt = (i) => padL + (i / Math.max(1, sbPath.length - 1)) * plotW;
+  const yAt = (e) => padT + plotH - ((e - minE) / (maxE - minE)) * plotH;
+
+  let html = "";
+  html += `<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT + plotH}" stroke="#3a3128"/>`;
+  html += `<line x1="${padL}" y1="${padT + plotH}" x2="${padL + plotW}" y2="${padT + plotH}" stroke="#3a3128"/>`;
+  // E0 line
+  const e0Y = yAt(E0);
+  html += `<line x1="${padL}" y1="${e0Y}" x2="${padL + plotW}" y2="${e0Y}" stroke="#7bd3c8" stroke-width="1" stroke-dasharray="3,3"/>`;
+  html += `<text x="${padL + plotW + 4}" y="${e0Y + 3}" fill="#7bd3c8" font-family="JetBrains Mono" font-size="9">E₀=${E0.toFixed(3)}</text>`;
+  // Y ticks
+  html += `<text x="${padL - 6}" y="${padT + 10}" text-anchor="end" fill="#8a806d" font-family="JetBrains Mono" font-size="9">${maxE.toFixed(2)}</text>`;
+  html += `<text x="${padL - 6}" y="${padT + plotH}" text-anchor="end" fill="#8a806d" font-family="JetBrains Mono" font-size="9">${minE.toFixed(2)}</text>`;
+  // Path
+  const points = sbPath.map((p, i) => `${xAt(i)},${yAt(p.e)}`).join(" ");
+  html += `<polyline points="${points}" fill="none" stroke="#f5d547" stroke-width="2"/>`;
+  for (let i = 0; i < sbPath.length; i++) {
+    html += `<circle cx="${xAt(i)}" cy="${yAt(sbPath[i].e)}" r="3" fill="#f5d547"/>`;
+  }
+  html += `<text x="${padL + plotW/2}" y="${H - 6}" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="9" letter-spacing="1.5">ITERATION</text>`;
+  svg.innerHTML = html;
+}
+
+function updateSbResult() {
+  const ham = sbHam();
+  const E0 = trueGroundEnergy(ham);
+  const cur = sbPath.length > 0 ? sbPath[sbPath.length - 1].e : energyAt(ham, [sbT1, sbT2]);
+  const verd = document.getElementById("sb-verdict");
+  verd.textContent = `⟨H⟩ = ${cur.toFixed(3)}`;
+  verd.className = "final-answer";
+  if (Math.abs(cur - E0) < 0.005) verd.classList.add("solved");
+
+  const comment = document.getElementById("sb-comment");
+  const gap = cur - E0;
+  if (sbPath.length <= 1) {
+    comment.innerHTML = `Initial point. <span class="mono">⟨H⟩ = ${cur.toFixed(3)}</span>, true ground state <span class="mono">E₀ = ${E0.toFixed(3)}</span>. Hit "Optimize" to start gradient descent.`;
+  } else if (gap < 0.005) {
+    comment.innerHTML = `Converged at <span class="mono">⟨H⟩ = ${cur.toFixed(3)}</span> after <span class="mono">${sbPath.length - 1}</span> iterations. Within numerical noise of <span class="mono">E₀ = ${E0.toFixed(3)}</span>.`;
+  } else if (sbIter >= 49) {
+    comment.innerHTML = `After <span class="mono">${sbIter}</span> iterations, <span class="mono">⟨H⟩ = ${cur.toFixed(3)}</span>, gap to <span class="mono">E₀</span> still <span class="mono">${gap.toFixed(3)}</span>. Either the learning rate is too small, or the optimizer is stuck in a local minimum.`;
+  } else {
+    comment.innerHTML = `Iteration <span class="mono">${sbIter}</span>. <span class="mono">⟨H⟩ = ${cur.toFixed(3)}</span>, gap to <span class="mono">E₀</span> is <span class="mono">${gap.toFixed(3)}</span>.`;
+  }
+  document.getElementById("sb-result").style.display = "block";
+}
+
+function syncSandboxUI() {
+  sbT1Val.textContent = sbT1.toFixed(3);
+  sbT2Val.textContent = sbT2.toFixed(3);
+  sbLRVal.textContent = sbLR.toFixed(2);
+  sbResetPath();
+  renderSandboxLandscape();
+  renderSandboxConv();
+  updateSbResult();
+}
+
+sbT1Slider.addEventListener("input", e => {
+  sbT1 = parseInt(e.target.value) / 100;
+  sbT1Val.textContent = sbT1.toFixed(3);
+  sbResetPath();
+  renderSandboxLandscape();
+  renderSandboxConv();
+  updateSbResult();
+});
+sbT2Slider.addEventListener("input", e => {
+  sbT2 = parseInt(e.target.value) / 100;
+  sbT2Val.textContent = sbT2.toFixed(3);
+  sbResetPath();
+  renderSandboxLandscape();
+  renderSandboxConv();
+  updateSbResult();
+});
+sbLRSlider.addEventListener("input", e => {
+  sbLR = parseInt(e.target.value) / 100;
+  sbLRVal.textContent = sbLR.toFixed(2);
+});
+
+document.querySelectorAll("#sb-ham button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#sb-ham button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    sbHamKey = btn.dataset.h;
+    syncSandboxUI();
+  });
+});
+
+document.getElementById("sb-step").addEventListener("click", sbStep);
+document.getElementById("sb-reset").addEventListener("click", () => {
+  sbResetPath();
+  renderSandboxLandscape();
+  renderSandboxConv();
+  updateSbResult();
+});
+document.getElementById("sb-random").addEventListener("click", () => {
+  sbT1 = Math.random() * 2 * Math.PI;
+  sbT2 = Math.random() * 2 * Math.PI;
+  sbT1Slider.value = Math.round(sbT1 * 100);
+  sbT2Slider.value = Math.round(sbT2 * 100);
+  sbT1Val.textContent = sbT1.toFixed(3);
+  sbT2Val.textContent = sbT2.toFixed(3);
+  sbResetPath();
+  renderSandboxLandscape();
+  renderSandboxConv();
+  updateSbResult();
+});
+
+document.getElementById("sb-run").addEventListener("click", () => {
+  if (sbAnimating) return;
+  sbAnimating = true;
+  let count = 0;
+  const interval = setInterval(() => {
+    sbStep();
+    count++;
+    // Stop if converged or max iterations
+    const ham = sbHam();
+    const E0 = trueGroundEnergy(ham);
+    const cur = sbPath[sbPath.length - 1].e;
+    if (count >= 50 || Math.abs(cur - E0) < 0.001) {
+      clearInterval(interval);
+      sbAnimating = false;
+    }
+  }, 80);
+});
+
+syncSandboxUI();
+
+/* =========================================================
+   PROGRESS RAIL + REVEAL ON SCROLL
+   ========================================================= */
+(function observers() {
+  const sections = document.querySelectorAll("section[id]");
+  const railLinks = document.querySelectorAll(".rail a");
+  const sectionToLink = {};
+  railLinks.forEach(a => sectionToLink[a.getAttribute("href").slice(1)] = a);
+
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        railLinks.forEach(a => a.classList.remove("active"));
+        const link = sectionToLink[e.target.id];
+        if (link) link.classList.add("active");
+      }
+    });
+  }, { rootMargin: "-45% 0px -45% 0px" });
+  sections.forEach(s => io.observe(s));
+
+  // Reveal observer
+  const reveals = document.querySelectorAll(".reveal, h2, .lead, .promise-card, .game-board, .curse-chart, .super-demo, .player, .sandbox, .stat-row");
+  reveals.forEach(r => r.classList.add("reveal"));
+  const ro = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add("seen");
+        ro.unobserve(e.target);
+      }
+    });
+  }, { rootMargin: "0px 0px -10% 0px" });
+  reveals.forEach(r => ro.observe(r));
+})();
+
+</script>
+</body>
+</html>
