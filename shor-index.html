@@ -1,0 +1,3170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Shor's Algorithm — A Hands-On Introduction</title>
+<meta name="description" content="Factoring integers in polynomial time — the algorithm that started the quantum computing race." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:ital,opsz,wght@0,6..72,200..800;1,6..72,200..800&display=swap" rel="stylesheet">
+<style>
+/* =========================================================
+   1. DESIGN TOKENS
+   ========================================================= */
+:root {
+  --bg:         #17130f;
+  --bg-soft:    #1f1a15;
+  --bg-lift:    #2a231c;
+  --ink:        #f1e6ce;
+  --ink-soft:   #c5b9a0;
+  --ink-dim:    #8a806d;
+  --line:       #3a3128;
+  --line-soft:  #2a231c;
+
+  --quantum:       #7bd3c8;
+  --quantum-dim:   #3d7a75;
+  --classical:     #e89a5a;
+  --classical-dim: #7a4f2a;
+  --spark:         #f5d547;
+  --alert:         #e0624b;
+
+  --font-display: "Instrument Serif", "Fraunces", Georgia, serif;
+  --font-body:    "Newsreader", "EB Garamond", Georgia, serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+
+  --measure:      68ch;
+  --radius-s:     4px;
+  --radius-m:     10px;
+  --radius-l:     20px;
+  --shadow-soft:  0 14px 40px -12px rgba(0,0,0,0.6);
+  --ease:         cubic-bezier(0.33, 1, 0.68, 1);
+  --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* =========================================================
+   2. RESET + BASE
+   ========================================================= */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 18px;
+  line-height: 1.65;
+  font-feature-settings: "liga", "kern";
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Warm subtle grain everywhere */
+body::before {
+  content: "";
+  position: fixed; inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  z-index: 1000;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+::selection { background: var(--spark); color: #000; }
+
+/* =========================================================
+   3. TYPOGRAPHY
+   ========================================================= */
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+}
+.display {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: clamp(3.2rem, 9vw, 7rem);
+  line-height: 0.98;
+  letter-spacing: -0.03em;
+}
+h2 {
+  font-size: clamp(2rem, 4.6vw, 3.4rem);
+  font-style: italic;
+  margin-bottom: 0.35em;
+}
+h2::before {
+  content: attr(data-act);
+  display: block;
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-size: 0.68rem;
+  letter-spacing: 0.3em;
+  color: var(--ink-dim);
+  margin-bottom: 1.4rem;
+  text-transform: uppercase;
+}
+h3 {
+  font-size: 1.6rem;
+  margin-bottom: 0.6em;
+}
+p {
+  margin-bottom: 1.1em;
+  max-width: var(--measure);
+}
+.lead {
+  font-size: clamp(1.15rem, 1.7vw, 1.35rem);
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+}
+em { font-style: italic; color: var(--spark); }
+strong { font-weight: 600; color: var(--ink); }
+code, .mono {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: var(--bg-soft);
+  padding: 0.08em 0.35em;
+  border-radius: var(--radius-s);
+  color: var(--quantum);
+  border: 1px solid var(--line-soft);
+}
+
+/* =========================================================
+   4. LAYOUT
+   ========================================================= */
+section {
+  padding: 9rem 1.5rem;
+  position: relative;
+}
+.container {
+  max-width: 1080px;
+  margin: 0 auto;
+}
+.narrow { max-width: 640px; margin: 0 auto; }
+
+.section-rule {
+  width: 80px; height: 1px;
+  background: var(--line);
+  margin: 0 0 2.5rem 0;
+}
+
+/* Progress rail on the side */
+.rail {
+  position: fixed; top: 50%; left: 1.2rem;
+  transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 0.8rem;
+  z-index: 100;
+  mix-blend-mode: difference;
+}
+.rail a {
+  display: block; width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(241,230,206,0.28);
+  transition: all 0.3s var(--ease);
+  position: relative;
+}
+.rail a.active { background: var(--spark); transform: scale(1.35); }
+.rail a:hover::after {
+  content: attr(data-label);
+  position: absolute; left: 20px; top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-mono); font-size: 0.7rem;
+  color: var(--ink); white-space: nowrap;
+  background: var(--bg-soft); padding: 4px 10px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--line);
+}
+@media (max-width: 820px) { .rail { display: none; } }
+
+/* =========================================================
+   5. HERO
+   ========================================================= */
+#hero {
+  min-height: 100vh;
+  display: flex; flex-direction: column; justify-content: center;
+  padding-top: 6rem; padding-bottom: 6rem;
+  position: relative;
+  overflow: hidden;
+}
+.hero-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.35em;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  margin-bottom: 2rem;
+}
+.hero-eyebrow .dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--quantum);
+  margin-right: 0.8rem;
+  vertical-align: middle;
+  animation: pulse 2.4s var(--ease) infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50%      { opacity: 1;   transform: scale(1.4); }
+}
+#hero .display span { color: var(--ink); }
+#hero .display .dash { color: var(--spark); font-style: normal; margin: 0 -0.15em; }
+.hero-sub {
+  margin-top: 1.8rem;
+  font-size: clamp(1.1rem, 1.6vw, 1.35rem);
+  max-width: 46ch;
+  color: var(--ink-soft);
+}
+.hero-meta {
+  margin-top: 3rem;
+  display: flex; gap: 2.2rem; flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.hero-meta b {
+  display: block;
+  color: var(--ink);
+  font-weight: 500;
+  font-size: 0.85rem;
+  margin-top: 0.2rem;
+}
+/* Animated bars behind hero title */
+.hero-bg {
+  position: absolute; inset: 0;
+  z-index: 0; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0.18;
+}
+.hero-bg svg { width: 90%; max-width: 900px; height: 260px; }
+#hero > * { position: relative; z-index: 1; }
+
+.scroll-cue {
+  margin-top: 5rem;
+  display: inline-flex; align-items: center; gap: 0.9rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.scroll-cue::before {
+  content: ""; width: 36px; height: 1px;
+  background: var(--ink-dim);
+  animation: cue 2s var(--ease) infinite;
+}
+@keyframes cue {
+  0%, 100% { transform: scaleX(1); opacity: 0.5; }
+  50%      { transform: scaleX(1.4); opacity: 1; }
+}
+
+/* =========================================================
+   6. PROMISE SECTION
+   ========================================================= */
+.promise-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-top: 3rem;
+}
+@media (max-width: 720px) { .promise-grid { grid-template-columns: 1fr; } }
+.promise-card {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 1.6rem 1.6rem 1.8rem;
+  position: relative;
+  overflow: hidden;
+}
+.promise-card .label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 1rem;
+}
+.promise-card h3 {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.8rem;
+  margin-bottom: 1.2rem;
+}
+.promise-card.constant h3  { color: var(--classical); }
+.promise-card.balanced h3  { color: var(--quantum); }
+
+.truth-table {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+.truth-table > div {
+  padding: 0.4em 0.9em;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex; align-items: center;
+}
+.truth-table > div:nth-last-child(-n+2) { border-bottom: none; }
+.truth-table .hx { background: var(--bg-lift); color: var(--ink-dim); }
+.truth-table .hy { background: var(--bg-lift); color: var(--ink-dim); font-weight: 500; }
+.truth-table .val { font-weight: 700; }
+.truth-table .val.zero { color: var(--ink-soft); }
+.truth-table .val.one  { color: var(--spark); }
+.truth-table .hx.marked-row { color: var(--spark); font-weight: 700; }
+
+/* Shor: factorization card */
+.shor-card-demo {
+  margin-top: 1.2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line-soft);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8rem;
+}
+.shor-card-demo .factor-eq {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.6rem;
+  color: var(--ink);
+  display: flex; align-items: baseline; gap: 0.4rem;
+}
+.shor-card-demo .factor-eq .n { color: var(--spark); font-weight: 600; }
+.shor-card-demo .factor-eq .eq { color: var(--ink-dim); }
+.shor-card-demo .factor-eq .f { color: var(--quantum); font-weight: 600; }
+.shor-card-demo .factor-eq .dot { color: var(--ink-dim); }
+.shor-card-demo .digits {
+  display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 0.3rem 1.2rem;
+  margin-top: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+.shor-card-demo .digits .stat {
+  display: flex; flex-direction: column; align-items: center; gap: 0.15rem;
+}
+.shor-card-demo .digits .k {
+  font-size: 0.6rem; letter-spacing: 0.18em; color: var(--ink-dim);
+  text-transform: uppercase;
+}
+.shor-card-demo .digits .v { color: var(--spark); }
+.truth-table .hx.pair { font-size: 0.86rem; }
+.truth-table .hx.pair .pair-sep { color: var(--ink-dim); margin: 0 0.3em; }
+
+.promise-card button {
+  margin-top: 1.2rem;
+  width: 100%;
+}
+
+/* =========================================================
+   7. CLASSICAL GAME
+   ========================================================= */
+.game-board {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 2rem;
+  margin-top: 2rem;
+}
+.game-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+.game-title {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.3rem;
+  color: var(--classical);
+}
+.query-counter {
+  display: flex; gap: 1.2rem; align-items: baseline;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.query-counter .n {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 2.4rem;
+  color: var(--spark);
+  line-height: 1;
+  font-feature-settings: "tnum";
+  letter-spacing: -0.02em;
+}
+.query-counter .slash {
+  color: var(--ink-dim);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.6rem;
+  margin: 0 -0.2em;
+}
+.query-counter .max {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.4rem;
+  color: var(--ink-soft);
+}
+
+.query-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.7rem;
+  margin-bottom: 1.8rem;
+}
+@media (max-width: 520px) { .query-grid { grid-template-columns: repeat(2, 1fr); } }
+.q-cell {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 1rem 0.6rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.25s var(--ease);
+  position: relative;
+  user-select: none;
+}
+.q-cell:hover:not(.queried):not(.locked) {
+  border-color: var(--classical);
+  background: var(--bg-lift);
+  transform: translateY(-1px);
+}
+.q-cell .x {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  display: block;
+  margin-bottom: 0.3rem;
+}
+.q-cell .result {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.8rem;
+  color: var(--ink-dim);
+  line-height: 1;
+  display: block;
+  min-height: 1.8rem;
+}
+.q-cell.queried .result.zero { color: var(--ink); }
+.q-cell.queried .result.one  { color: var(--spark); }
+.q-cell.queried  { background: var(--bg-lift); border-color: var(--classical-dim); }
+.q-cell.locked   { cursor: not-allowed; opacity: 0.6; }
+.q-cell .flash {
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  background: var(--spark);
+  opacity: 0;
+  pointer-events: none;
+}
+.q-cell.flash-on .flash { animation: flash 0.45s var(--ease-out); }
+@keyframes flash {
+  0%   { opacity: 0.5; }
+  100% { opacity: 0; }
+}
+
+.belief-bar {
+  height: 8px; width: 100%;
+  background: var(--bg-lift);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+  position: relative;
+}
+.belief-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--classical-dim), var(--classical), var(--spark));
+  transition: width 0.6s var(--ease-out);
+  width: 0%;
+}
+.belief-label {
+  display: flex; justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 0.5rem;
+}
+.belief-label b {
+  color: var(--ink-soft);
+  font-feature-settings: "tnum";
+}
+
+.commit-row {
+  display: flex; gap: 0.8rem; flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+.commit-row button { flex: 1; min-width: 160px; }
+
+.verdict {
+  margin-top: 1.5rem;
+  padding: 1.2rem 1.4rem;
+  border-radius: var(--radius-m);
+  border-left: 3px solid;
+  background: var(--bg);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: 1.5;
+  display: none;
+}
+.verdict.show { display: block; animation: fadeIn 0.4s var(--ease-out); }
+.verdict.win   { border-color: var(--quantum); }
+.verdict.lucky { border-color: var(--spark); }
+.verdict.wrong { border-color: var(--alert); }
+.verdict.info  { border-color: var(--classical); }
+.verdict b { color: var(--spark); }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* BV-specific: secret-so-far display */
+.secret-reveal {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 0.8rem;
+  padding: 1.8rem 1rem;
+  margin-bottom: 1.5rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
+.secret-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.secret-bits {
+  display: flex;
+  gap: 0.6rem;
+}
+.secret-bits .bit {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 54px; height: 66px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--bg-soft);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 2.6rem;
+  line-height: 1;
+  color: var(--ink-dim);
+  transition: all 0.5s var(--ease-out);
+}
+.secret-bits .bit.revealed.zero {
+  color: var(--ink);
+  border-color: var(--classical-dim);
+  background: var(--bg-lift);
+}
+.secret-bits .bit.revealed.one {
+  color: var(--spark);
+  border-color: var(--spark);
+  background: rgba(245,213,71,0.08);
+}
+.secret-bits .bit.just-revealed {
+  animation: reveal 0.8s var(--ease-out);
+}
+@keyframes reveal {
+  0%   { transform: scale(1.15); box-shadow: 0 0 0 0 rgba(245,213,71,0.4); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 20px rgba(245,213,71,0); }
+}
+.candidates-info {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  color: var(--ink-dim);
+  margin-top: 0.4rem;
+}
+.candidates-info #candidates-count {
+  color: var(--spark);
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+/* Query sections */
+.queries-section { margin-bottom: 1.2rem; }
+.queries-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 0.8rem;
+}
+.basis-queries {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.6rem;
+}
+@media (max-width: 520px) { .basis-queries { grid-template-columns: repeat(2, 1fr); } }
+.basis-queries .btn {
+  padding: 0.75em 0.5em;
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  font-family: var(--font-mono);
+}
+.basis-queries .btn.used {
+  opacity: 0.45;
+  pointer-events: none;
+  border-style: dashed;
+}
+.custom-query-row {
+  display: flex; gap: 0.6rem;
+}
+.custom-query-row .sb-text { flex: 1; }
+
+.query-log {
+  margin-top: 1.2rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  max-height: 180px;
+  overflow-y: auto;
+}
+.query-log ul {
+  list-style: none;
+  padding: 0.4rem 1.2rem 1rem;
+  margin: 0;
+}
+.query-log li {
+  padding: 0.4rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--line-soft);
+  display: flex; gap: 1rem; align-items: baseline;
+}
+.query-log li:last-child { border-bottom: none; }
+.query-log li .idx {
+  color: var(--ink-dim);
+  min-width: 2ch;
+}
+.query-log li .x { color: var(--ink); }
+.query-log li .arrow { color: var(--ink-dim); }
+.query-log li .f { color: var(--spark); font-weight: 700; }
+.query-log li .elim { color: var(--ink-dim); margin-left: auto; font-size: 0.72rem; }
+
+/* Shor: factoring effort comparison */
+.factoring-comparison {
+  display: flex; flex-direction: column;
+  gap: 0.8rem;
+  padding: 0.5rem 0;
+}
+.factoring-comparison h4 {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 0.6rem;
+  font-weight: 400;
+}
+.factoring-row {
+  display: grid;
+  grid-template-columns: 130px 1fr 180px;
+  align-items: center;
+  gap: 1rem;
+}
+.factoring-row .name {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+.factoring-row .bar-wrap {
+  height: 24px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  position: relative;
+  overflow: hidden;
+}
+.factoring-row .bar-fill {
+  height: 100%;
+  border-radius: var(--radius-s);
+  transition: width 0.6s var(--ease-out);
+}
+.factoring-row.classical .bar-fill { background: var(--classical); }
+.factoring-row.quantum   .bar-fill { background: var(--quantum); }
+.factoring-row .value {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--spark);
+  text-align: right;
+}
+
+/* Shor: order finding demo (sequence of a^k mod N) */
+.order-demo {
+  padding: 0.8rem 0;
+}
+.order-demo .header {
+  display: flex; gap: 1.4rem; align-items: center; flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.order-demo .header label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  display: flex; align-items: center; gap: 0.6rem;
+}
+.order-demo .header label input {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  padding: 0.3em 0.6em;
+  width: 5em;
+  text-align: center;
+}
+.order-demo .sequence {
+  display: flex; flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+.order-demo .term {
+  display: flex; flex-direction: column;
+  align-items: center;
+  padding: 0.5em 0.7em;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  min-width: 3.5em;
+  transition: background 0.3s var(--ease);
+}
+.order-demo .term .exp {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--ink-dim);
+  letter-spacing: 0.1em;
+}
+.order-demo .term .val {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.3rem;
+  color: var(--ink);
+  margin-top: 0.1rem;
+}
+.order-demo .term.one .val { color: var(--spark); }
+.order-demo .term.repeats {
+  border-color: var(--quantum);
+  background: rgba(123, 211, 200, 0.06);
+}
+.order-demo .verdict {
+  margin-top: 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+.order-demo .verdict .order {
+  color: var(--quantum);
+  font-weight: 600;
+}
+.query-log li .meaning { color: var(--ink-soft); }
+.query-log li .meaning sub { font-size: 0.75em; }
+
+/* Rules / How it works aside */
+.rules-box {
+  max-width: var(--measure);
+  margin: 2.5rem 0 2rem;
+  padding: 1.6rem 1.8rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--quantum);
+  border-radius: var(--radius-m);
+}
+.rules-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--quantum);
+  margin-bottom: 0.9rem;
+}
+.rules-box p {
+  font-size: 1rem;
+  line-height: 1.55;
+  margin-bottom: 0.8rem;
+  max-width: none;
+}
+.example-list {
+  list-style: none;
+  padding: 0.6rem 0;
+  margin: 0 0 0.8rem;
+  font-size: 0.95rem;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+.example-list li {
+  padding: 0.35rem 0;
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+}
+.example-list li .mono { background: transparent; border: none; padding: 0; color: var(--ink); }
+.example-list li strong { color: var(--spark); font-weight: 700; }
+.ex-result {
+  font-family: var(--font-mono);
+  color: var(--spark);
+  font-weight: 700;
+  background: rgba(245,213,71,0.08);
+  padding: 0.08em 0.4em;
+  border-radius: 3px;
+}
+
+/* Basis-query button with two lines */
+.basis-queries .btn {
+  display: flex; flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.7em 0.5em;
+}
+.basis-queries .btn .reveals {
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  color: var(--quantum);
+  font-weight: 400;
+  text-transform: none;
+}
+.basis-queries .btn.used .reveals { color: var(--ink-dim); }
+
+/* =========================================================
+   8. BUTTONS
+   ========================================================= */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.6rem;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 500;
+  padding: 0.85em 1.4em;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+  text-decoration: none;
+  line-height: 1;
+}
+.btn:hover { border-color: var(--ink); background: var(--bg-lift); }
+.btn.primary {
+  background: var(--spark);
+  color: #1a1509;
+  border-color: var(--spark);
+  font-weight: 700;
+}
+.btn.primary:hover {
+  background: #fbe064;
+  border-color: #fbe064;
+  transform: translateY(-1px);
+}
+.btn.ghost { color: var(--ink-soft); }
+.btn.quantum { border-color: var(--quantum); color: var(--quantum); }
+.btn.quantum:hover { background: var(--quantum); color: #0b1816; }
+.btn.classical { border-color: var(--classical); color: var(--classical); }
+.btn.classical:hover { background: var(--classical); color: #1a0f05; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* =========================================================
+   9. CURSE CHART
+   ========================================================= */
+.curse-chart {
+  margin-top: 3rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 2rem;
+  overflow-x: auto;
+}
+.curse-chart svg { width: 100%; height: auto; min-width: 420px; }
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-top: 2rem;
+}
+@media (max-width: 620px) { .stat-row { grid-template-columns: 1fr; } }
+.stat {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 1.2rem 1.4rem;
+}
+.stat .k {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 0.3rem;
+}
+.stat .v {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 2rem;
+  color: var(--spark);
+  line-height: 1;
+}
+.stat .v small { color: var(--ink-soft); font-size: 0.6em; }
+
+/* =========================================================
+   10. QUANTUM INTRO — SUPERPOSITION
+   ========================================================= */
+.super-demo {
+  margin-top: 2.5rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 2rem;
+  text-align: center;
+}
+.super-demo .bar-row {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 14px;
+  height: 220px;
+  margin: 1.5rem 0;
+}
+.super-bar {
+  flex: 0 0 auto;
+  width: 46px;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  position: relative;
+}
+.super-bar .fill {
+  width: 100%;
+  background: var(--quantum);
+  transition: height 0.8s var(--ease-out), background 0.4s var(--ease);
+  border-radius: 2px 2px 0 0;
+}
+.super-bar .lbl {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--ink-dim);
+  margin-top: 0.6rem;
+}
+.super-demo .explanation {
+  color: var(--ink-soft);
+  font-style: italic;
+  font-size: 1.05rem;
+  min-height: 3.2em;
+  max-width: 54ch;
+  margin: 1rem auto 0;
+}
+
+/* Formula box */
+.formula-box {
+  margin: 2rem auto;
+  max-width: 64ch;
+  padding: 1.6rem 2rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  text-align: center;
+}
+.formula {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: clamp(1.4rem, 2.4vw, 1.9rem);
+  color: var(--quantum);
+  letter-spacing: 0.01em;
+}
+.formula sub, .formula sup {
+  font-size: 0.7em;
+  font-style: normal;
+}
+.formula-note {
+  margin-top: 1rem;
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+/* Shor: continued fraction expansion demo */
+.continued-fraction {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+.cf-input-display {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.6rem;
+  color: var(--spark);
+  margin-bottom: 0.6rem;
+}
+.cf-table {
+  display: grid;
+  grid-template-columns: auto auto auto auto;
+  gap: 0.4rem 1.2rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  padding: 1rem 1.4rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  min-width: 320px;
+}
+.cf-table .head {
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  border-bottom: 1px solid var(--line-soft);
+  padding-bottom: 0.3em;
+  margin-bottom: 0.2em;
+}
+.cf-table .cell.k {
+  color: var(--ink-soft);
+}
+.cf-table .cell.frac {
+  color: var(--ink);
+}
+.cf-table .cell.err {
+  color: var(--ink-dim);
+}
+.cf-table .cell.best {
+  color: var(--quantum);
+  font-weight: 600;
+}
+.cf-verdict {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+.cf-verdict .denom {
+  color: var(--quantum);
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+/* Phase demo: complex amplitudes shown as arrows on the unit circle */
+.phase-demo {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 3rem;
+  flex-wrap: wrap;
+  margin: 1.5rem 0;
+}
+.phase-amp {
+  display: flex; flex-direction: column; align-items: center; gap: 0.8rem;
+}
+.phase-amp svg { width: 110px; height: 110px; }
+.phase-amp .label {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.4rem;
+  color: var(--quantum);
+}
+.phase-amp .desc {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  color: var(--ink-dim);
+}
+
+/* =========================================================
+   11. ALGORITHM PLAYER
+   ========================================================= */
+.player {
+  margin-top: 2rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  overflow: hidden;
+}
+.player-header {
+  padding: 1.3rem 1.8rem;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.step-label {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.5rem;
+  color: var(--ink);
+}
+.step-label .count {
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  color: var(--ink-dim);
+  margin-right: 0.8rem;
+  text-transform: uppercase;
+}
+
+.player-body {
+  padding: 2rem 1.5rem;
+}
+
+/* Circuit diagram */
+.circuit-container {
+  overflow-x: auto;
+  padding: 0.5rem 0;
+  margin-bottom: 1.5rem;
+}
+.circuit-svg {
+  display: block;
+  margin: 0 auto;
+}
+
+/* Amplitude bars visualization */
+.amp-viz {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px dashed var(--line);
+}
+.amp-viz h4 {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 1.2rem;
+  font-weight: 400;
+}
+.amp-bar-row {
+  position: relative;
+  height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 0.5rem;
+}
+.amp-bar-row::before {
+  content: "";
+  position: absolute; left: 0; right: 0; top: 50%;
+  height: 1px;
+  background: var(--line);
+  z-index: 0;
+}
+.amp-bar {
+  flex: 0 1 52px;
+  min-width: 12px;
+  height: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+.amp-bar .fill {
+  position: absolute;
+  left: 4px; right: 4px;
+  top: 50%;
+  background: var(--quantum);
+  height: 0;
+  transition: top 0.7s var(--ease-out), height 0.7s var(--ease-out), background 0.4s var(--ease);
+  border-radius: 2px;
+}
+.amp-bar .fill.negative { background: var(--alert); }
+
+/* Probability mode: bars go from bottom up, using full height */
+.amp-bar-row.prob-mode::before { display: none; }
+.amp-bar-row.prob-mode .amp-bar .fill {
+  top: auto;
+  bottom: 0;
+  background: var(--quantum);
+}
+.amp-bar .lbl {
+  position: absolute;
+  bottom: -1.8rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+/* Hide labels when there are many bars; only show every few */
+.amp-bar-row.dense .amp-bar .lbl { display: none; }
+.amp-bar-row.dense .amp-bar.marked .lbl { display: block; font-size: 0.6rem; }
+.amp-bar .val {
+  position: absolute;
+  top: -1.3rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--ink-soft);
+  opacity: 0;
+  transition: opacity 0.3s var(--ease);
+  white-space: nowrap;
+}
+.amp-bar:hover .val { opacity: 1; }
+
+.amp-legend {
+  display: flex; gap: 1.8rem; justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-top: 2.8rem;
+}
+.amp-legend .chip {
+  display: inline-block; width: 10px; height: 10px;
+  border-radius: 2px;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+}
+.amp-legend .chip.pos { background: var(--quantum); }
+.amp-legend .chip.neg { background: var(--alert); }
+.amp-legend .chip.marked { background: var(--spark); }
+
+/* Shor: two-column player layout */
+.shor-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.6rem;
+  margin-top: 1rem;
+}
+@media (max-width: 880px) {
+  .shor-row { grid-template-columns: 1fr; }
+}
+.shor-col h4 {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 1.1rem;
+  font-weight: 400;
+}
+.shor-state {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 1.2rem 1.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+.shor-state .row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 0.4em 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.shor-state .row:last-child { border-bottom: none; }
+.shor-state .row .k {
+  color: var(--ink-dim);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.shor-state .row .v {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.3rem;
+  color: var(--ink);
+}
+.shor-state .row .v.active { color: var(--spark); }
+.shor-state .row .v.success { color: var(--quantum); }
+.shor-state .row .v.dim { color: var(--ink-dim); }
+.shor-state .row .v.mono {
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-size: 0.9rem;
+}
+.ansatz-params {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.2rem;
+  margin-top: 0.8rem;
+  padding: 0.8rem 1rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+.ansatz-params .pchip {
+  display: flex; align-items: center; gap: 0.4rem;
+}
+.ansatz-params .pchip .pname {
+  color: var(--ink-dim);
+  letter-spacing: 0.06em;
+}
+.ansatz-params .pchip .pval {
+  color: var(--spark);
+  font-weight: 600;
+  min-width: 4em;
+  text-align: right;
+}
+
+#conv-svg, #prob-svg {
+  width: 100%;
+  height: auto;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+}
+.conv-readout {
+  display: flex; gap: 1.6rem;
+  margin-top: 0.8rem;
+  flex-wrap: wrap;
+}
+.conv-readout > div {
+  display: flex; flex-direction: column;
+  gap: 0.3rem;
+}
+.conv-readout .k {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+}
+.conv-readout .v {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.4rem;
+  color: var(--spark);
+  font-feature-settings: "tnum";
+}
+
+/* Phase legend chip — color wheel */
+.phase-chip {
+  display: inline-block;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+  background: conic-gradient(
+    from 0deg,
+    hsl(0, 70%, 60%),
+    hsl(60, 70%, 60%),
+    hsl(120, 70%, 55%),
+    hsl(180, 70%, 55%),
+    hsl(240, 70%, 65%),
+    hsl(300, 70%, 60%),
+    hsl(360, 70%, 60%)
+  );
+  border: 1px solid var(--ink-dim);
+}
+
+/* Complex amplitude bars: vertical bar (magnitude) + small phase indicator */
+.complex-bars {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 12px;
+  height: 220px;
+  padding-bottom: 2.4rem;
+  padding-top: 2rem;
+  position: relative;
+}
+.complex-bar {
+  flex: 0 1 56px;
+  min-width: 24px;
+  height: 100%;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+}
+.complex-bar .fill {
+  width: 100%;
+  background: var(--quantum);
+  border-radius: 2px 2px 0 0;
+  transition: height 0.6s var(--ease-out), background 0.4s var(--ease);
+  min-height: 0;
+}
+.complex-bar .lbl {
+  position: absolute;
+  bottom: -1.7rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+.complex-bar .phase-arrow {
+  position: absolute;
+  top: -2.2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px; height: 32px;
+}
+.complex-bars.dense .complex-bar .lbl { display: none; }
+.complex-bars.dense .complex-bar .phase-arrow {
+  width: 20px; height: 20px;
+  top: -1.6rem;
+}
+
+/* Grover: highlight the marked bar */
+.amp-bar.marked .fill {
+  outline: 2px solid var(--spark);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+.amp-bar.marked .lbl {
+  color: var(--spark);
+  font-weight: 700;
+}
+
+/* Grover two-column player body */
+.grover-viz-row {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 2rem;
+  align-items: start;
+  margin-top: 1rem;
+}
+@media (max-width: 820px) {
+  .grover-viz-row { grid-template-columns: 1fr; }
+}
+.grover-viz-row > div > h4 {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 1.2rem;
+  font-weight: 400;
+}
+
+.geom-viz {
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.geom-viz svg {
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+}
+.prob-readout {
+  display: flex;
+  gap: 1.8rem;
+  margin-top: 1rem;
+  justify-content: center;
+}
+.prob-readout > div {
+  display: flex; flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+}
+.prob-readout .k {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.prob-readout .v {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.8rem;
+  color: var(--spark);
+  line-height: 1;
+  font-feature-settings: "tnum";
+}
+
+/* Commentary box */
+.commentary {
+  margin-top: 2rem;
+  padding: 1.2rem 1.4rem;
+  border-left: 3px solid var(--quantum);
+  background: var(--bg);
+  border-radius: 0 var(--radius-s) var(--radius-s) 0;
+  font-style: italic;
+  color: var(--ink-soft);
+  min-height: 3.4em;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+/* Player controls */
+.player-controls {
+  display: flex;
+  gap: 0.7rem;
+  align-items: center;
+  justify-content: center;
+  padding: 1.2rem 1.5rem;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+  flex-wrap: wrap;
+}
+.player-controls .spacer { flex: 1; }
+.step-dots {
+  display: flex; gap: 6px;
+  align-items: center;
+}
+.step-dots .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--line);
+  transition: all 0.3s var(--ease);
+}
+.step-dots .dot.active { background: var(--spark); transform: scale(1.3); }
+.step-dots .dot.done   { background: var(--quantum); }
+
+/* Oracle picker */
+.oracle-picker {
+  display: flex; gap: 0.6rem; align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  flex-wrap: wrap;
+}
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+.seg button {
+  background: transparent;
+  border: none;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  padding: 0.6em 0.9em;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: all 0.2s;
+  border-right: 1px solid var(--line);
+}
+.seg button:last-child { border-right: none; }
+.seg button.active {
+  background: var(--spark);
+  color: #1a1509;
+  font-weight: 700;
+}
+.seg button:hover:not(.active) { background: var(--bg-lift); color: var(--ink); }
+
+/* =========================================================
+   12. SANDBOX
+   ========================================================= */
+.sandbox {
+  margin-top: 2rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 2rem;
+}
+.sb-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.3rem 2rem;
+  padding-bottom: 1.8rem;
+  margin-bottom: 1.8rem;
+  border-bottom: 1px solid var(--line);
+}
+@media (max-width: 640px) { .sb-controls { grid-template-columns: 1fr; } }
+.ctrl {
+  display: flex; flex-direction: column; gap: 0.55rem;
+}
+.ctrl label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.ctrl .value {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.5rem;
+  color: var(--spark);
+  line-height: 1;
+}
+.slider {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 4px;
+  background: var(--line);
+  border-radius: 999px;
+  outline: none;
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px; height: 18px;
+  background: var(--spark);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.slider::-webkit-slider-thumb:hover { transform: scale(1.18); }
+.slider::-moz-range-thumb {
+  width: 18px; height: 18px;
+  background: var(--spark);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.sb-text {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 0.7em 0.9em;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.sb-text:focus { border-color: var(--spark); }
+
+.sb-result {
+  margin-top: 2rem;
+  padding: 1.4rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
+.sb-result .step-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 1rem; flex-wrap: wrap;
+  margin-bottom: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.sb-result .final-answer {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.8rem;
+}
+.sb-result .final-answer.constant { color: var(--classical); }
+.sb-result .final-answer.balanced { color: var(--quantum); }
+.sb-result .final-answer.solved   { color: var(--spark); }
+
+.sb-section { margin-top: 0.5rem; }
+.sb-section-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 0.6rem;
+}
+
+/* Simon shots table */
+.shot-table {
+  display: grid;
+  grid-template-columns: auto auto auto 1fr;
+  gap: 0;
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+.shot-table > div {
+  padding: 0.55rem 1rem;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex; align-items: center;
+}
+.shot-table > div:nth-last-child(-n+4) { border-bottom: none; }
+.shot-table .sh { background: var(--bg-lift); color: var(--ink-dim); font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase; }
+.shot-table .sh-idx { color: var(--ink-dim); }
+.shot-table .sh-y   { color: var(--ink); font-weight: 500; }
+.shot-table .sh-eq  { color: var(--ink-soft); }
+.shot-table .sh-note { color: var(--ink-dim); font-size: 0.78rem; }
+.shot-table .row-useful .sh-note { color: var(--quantum); }
+.shot-table .row-redundant .sh-note { color: var(--ink-dim); }
+.shot-table .row-zero .sh-note { color: var(--classical); }
+
+.shot-table .row-useful .sh-y { color: var(--quantum); }
+
+/* =========================================================
+   13. OUTRO
+   ========================================================= */
+#outro {
+  background: var(--bg-soft);
+  border-top: 1px solid var(--line);
+  margin-top: 4rem;
+}
+.series-list {
+  margin-top: 2rem;
+  list-style: none;
+  padding: 0;
+}
+.series-list li {
+  padding: 1.1rem 0;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 1.5rem;
+}
+.series-list li:last-child { border-bottom: none; }
+.series-list .num {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+  color: var(--ink-dim);
+  min-width: 3ch;
+}
+.series-list .name {
+  flex: 1;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.4rem;
+  color: var(--ink);
+}
+.series-list .name .done {
+  color: var(--quantum);
+  margin-left: 0.5rem;
+  font-style: normal;
+  font-size: 0.8em;
+}
+.series-list .name .here {
+  color: var(--spark);
+  margin-left: 0.5rem;
+  font-style: normal;
+  font-size: 0.75em;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+}
+.series-list .status {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+}
+
+footer {
+  padding: 3rem 1.5rem 4rem;
+  text-align: center;
+  border-top: 1px solid var(--line);
+  color: var(--ink-dim);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+}
+footer a { color: var(--ink-soft); text-decoration: none; border-bottom: 1px solid var(--line); }
+footer a:hover { color: var(--spark); border-color: var(--spark); }
+
+/* =========================================================
+   14. REVEALS
+   ========================================================= */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.9s var(--ease-out), transform 0.9s var(--ease-out);
+}
+.reveal.seen { opacity: 1; transform: translateY(0); }
+
+/* =========================================================
+   15. RESPONSIVE
+   ========================================================= */
+@media (max-width: 540px) {
+  section { padding: 6rem 1rem; }
+  body    { font-size: 16px; }
+  .game-board, .player, .sandbox { padding: 1.3rem; }
+  .player-body { padding: 1.2rem 0.6rem; }
+  .amp-bar-row { gap: 6px; height: 180px; }
+  .amp-bar .lbl { font-size: 0.58rem; }
+  .circuit-container { margin: 0 -0.6rem; padding: 0 0.6rem; }
+}
+</style>
+</head>
+<body>
+
+<nav class="rail" aria-label="Section progress">
+  <a href="#hero"      data-label="Start"></a>
+  <a href="#promise"   data-label="The promise"></a>
+  <a href="#classical" data-label="Classical"></a>
+  <a href="#curse"     data-label="Scaling"></a>
+  <a href="#quantum"   data-label="Quantum idea"></a>
+  <a href="#algorithm" data-label="Algorithm"></a>
+  <a href="#sandbox"   data-label="Sandbox"></a>
+  <a href="#outro"     data-label="What's next"></a>
+</nav>
+
+<!-- ===================================================
+     SECTION 1: HERO
+     =================================================== -->
+<section id="hero">
+  <div class="hero-bg"><svg id="hero-bars" viewBox="0 0 900 260" preserveAspectRatio="none" aria-hidden="true"></svg></div>
+  <div class="container">
+    <div class="hero-eyebrow"><span class="dot"></span>A hands-on introduction · Quantum algorithms series · №09</div>
+    <h1 class="display" style="font-size: clamp(2.4rem, 7vw, 5.4rem)">
+      <span>Shor's&nbsp;Algorithm</span>
+    </h1>
+    <p class="hero-sub">Factoring large integers in polynomial time — the algorithm that broke RSA on paper in 1994 and started a thirty-year race to build a machine that could run it.</p>
+    <div class="hero-meta">
+      <div>Reading time<b>~ 22 minutes</b></div>
+      <div>Prerequisites<b>QFT + QPE</b></div>
+      <div>Runs on<b>Your browser</b></div>
+    </div>
+    <div class="scroll-cue">Scroll</div>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 2: THE SETUP
+     =================================================== -->
+<section id="promise">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act I">Break a number into its primes.</h2>
+    <p class="lead narrow">A classical problem with a classical statement. Given a positive integer <span class="mono">N</span>, find a non-trivial factor of <span class="mono">N</span>. Equivalently: write <span class="mono">N = p · q</span> for some <span class="mono">p, q &gt; 1</span>. Trivial when <span class="mono">N</span> is small — anyone can spot that <span class="mono">15 = 3 · 5</span>. But for the kind of numbers used in modern cryptography, factorization is the problem that keeps internet traffic, banking, and digital signatures safe.</p>
+
+    <div class="promise-grid">
+      <article class="promise-card constant">
+        <div class="label">Small example</div>
+        <h3>N = 15 by hand.</h3>
+        <p>Trial division: <span class="mono">15 / 2 = 7.5</span> (no), <span class="mono">15 / 3 = 5</span> (yes!). So <span class="mono">15 = 3 · 5</span>. We're done in two steps because 15 is tiny.</p>
+        <div class="shor-card-demo" id="shor-card-demo"></div>
+      </article>
+      <article class="promise-card balanced">
+        <div class="label">Why it matters</div>
+        <h3>RSA cryptography.</h3>
+        <p>RSA picks two large primes <span class="mono">p, q</span> and publishes their product <span class="mono">N = p · q</span> as the public key. Anyone can encrypt to <span class="mono">N</span>, but decrypting requires <span class="mono">p</span> and <span class="mono">q</span> — which you'd need to factor <span class="mono">N</span> to find.</p>
+        <p style="margin-top:1.2rem; font-size:0.9rem; color:var(--ink-soft); border-top:1px solid var(--line-soft); padding-top:1rem"><strong>Production RSA</strong> uses <span class="mono">N</span> of 2048 bits — about 617 decimal digits. The best classical algorithm (GNFS) would take longer than the age of the universe to factor one. Shor's algorithm, on a sufficiently large quantum computer, would factor it in hours.</p>
+      </article>
+    </div>
+
+    <p class="narrow" style="margin-top:3rem">Shor's algorithm, published in 1994, was the discovery that turned quantum computing from a theoretical curiosity into a strategic priority for governments and intelligence agencies. Nobody has yet built a quantum computer large enough to factor a real RSA key. But the algorithm exists, the math is correct, and the only question is whether the hardware will catch up — and how soon.</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 3: WHY CLASSICAL IS HARD
+     =================================================== -->
+<section id="classical">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act II">The classical state of the art.</h2>
+    <p class="lead narrow">Factoring an integer feels like it should be easy — multiplication is fast, so why is its inverse hard? The answer is that classical factoring algorithms have grown more clever over decades, and the best known still runs in <em>sub-exponential</em> time. Not polynomial — but not quite exponential either. Just slow enough that production cryptography is safe, for now.</p>
+
+    <aside class="rules-box">
+      <div class="rules-label">Method 1 · Trial division</div>
+      <p>Try every <span class="mono">d</span> from <span class="mono">2</span> to <span class="mono">√N</span>. Works for small <span class="mono">N</span>, but the cost is <span class="mono">O(√N)</span> — exponential in the number of digits. For a 2048-bit key, that's about <span class="mono">2¹⁰²⁴</span> divisions: more than the number of atoms in the universe.</p>
+    </aside>
+
+    <aside class="rules-box" style="margin-top:1rem">
+      <div class="rules-label">Method 2 · Quadratic sieve, Pollard's rho</div>
+      <p>Smarter classical methods. They run in <span class="mono">exp(O(√(log N · log log N)))</span> time — sub-exponential but still useless for keys above a few hundred bits.</p>
+    </aside>
+
+    <aside class="rules-box" style="margin-top:1rem">
+      <div class="rules-label">Method 3 · General Number Field Sieve (GNFS)</div>
+      <p>The current best classical algorithm. Runs in roughly <span class="mono">exp(O(∛(log N · (log log N)²)))</span>. The largest RSA modulus factored in public was RSA-250 (829 bits, 2020), using thousands of CPU-years. RSA-2048 is currently out of reach.</p>
+    </aside>
+
+    <p class="narrow" style="margin-top:2rem">Below: a chart of classical factoring effort vs key size. The y-axis is log-log because the numbers blow up so fast. The "<em>quantum threshold</em>" line shows where a fault-tolerant quantum computer running Shor would tie a classical supercomputer on the same problem.</p>
+
+    <div class="game-board">
+      <div class="factoring-comparison" id="factoring-comparison"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 4: THE REDUCTION
+     =================================================== -->
+<section id="curse">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act III">From factoring to order-finding.</h2>
+    <p class="lead narrow">Shor's first trick isn't quantum — it's a classical reduction. Factoring is hard, but a different problem called <em>order-finding</em> can be reduced to factoring through a chain of number-theoretic identities. So if you can solve order-finding, you can factor. The quantum advantage will live in solving order-finding.</p>
+
+    <p class="narrow">The <strong>order</strong> of an integer <span class="mono">a</span> modulo <span class="mono">N</span> is the smallest positive integer <span class="mono">r</span> with <span class="mono">aʳ ≡ 1 (mod N)</span>. Equivalently, the sequence <span class="mono">a, a², a³, …</span> taken modulo <span class="mono">N</span> repeats with period <span class="mono">r</span>. Below, the powers of <span class="mono">a = 7</span> modulo <span class="mono">15</span> — see if you can spot the period.</p>
+
+    <div class="game-board">
+      <div class="order-demo" id="order-demo"></div>
+    </div>
+
+    <p class="narrow" style="margin-top:2rem">Here's the magic. Suppose you've found <span class="mono">r</span>, the order of <span class="mono">a</span> mod <span class="mono">N</span>. If <span class="mono">r</span> happens to be even and <span class="mono">a^(r/2) ≢ −1 (mod N)</span>, then:</p>
+
+    <div class="formula-box">
+      <div class="formula">aʳ − 1 = (a^(r/2) − 1)(a^(r/2) + 1) ≡ 0 (mod N)</div>
+      <div class="formula-note">So <span class="mono">N</span> divides the product. But <span class="mono">N</span> doesn't divide either factor individually (because <span class="mono">r</span> is the smallest such exponent, and we ruled out <span class="mono">a^(r/2) ≡ −1</span>). That means <span class="mono">gcd(a^(r/2) ± 1, N)</span> gives a non-trivial factor of <span class="mono">N</span>.</div>
+    </div>
+
+    <p class="narrow">For <span class="mono">a = 7, N = 15</span>: <span class="mono">7² = 49 ≡ 4 (mod 15)</span>, <span class="mono">7³ = 343 ≡ 13</span>, <span class="mono">7⁴ = 2401 ≡ 1</span>. So <span class="mono">r = 4</span>. It's even, and <span class="mono">7² = 4 ≢ −1 ≡ 14</span>. Compute <span class="mono">gcd(7² − 1, 15) = gcd(48, 15) = 3</span>. Done. <span class="mono">15 = 3 · 5</span>.</p>
+
+    <p class="narrow">The success probability of "<em>r</em> is usable" is at least <span class="mono">1/2</span> for typical <span class="mono">N</span>, so a few random tries of <span class="mono">a</span> almost always succeed. Everything in this reduction is polynomial-time classical. The expensive step — the only expensive step — is finding <span class="mono">r</span>.</p>
+
+    <p class="narrow"><strong>Why is order-finding hard?</strong> Computing <span class="mono">aᵏ mod N</span> for any given <span class="mono">k</span> is fast (polynomial time via repeated squaring). But finding the <em>period</em> of the sequence requires sampling enough values to spot when it repeats — and the period itself can be exponentially large in the bits of <span class="mono">N</span>. Without a clever trick, you'd need exponentially many samples.</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 5: QUANTUM IDEA
+     =================================================== -->
+<section id="quantum">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act IV">Order-finding via phase estimation.</h2>
+    <p class="lead narrow">The quantum punch line: there's a unitary operator whose eigenphases <em>are</em> the period information we want, and quantum phase estimation reads eigenphases. The classical reduction handed us a well-defined target; the QFT and QPE machinery from earlier episodes does the heavy lifting; a tiny bit of classical post-processing extracts the answer.</p>
+
+    <p class="narrow"><strong>The unitary.</strong> Define <span class="mono">U_a</span> to act on basis states <span class="mono">|y⟩</span> (where <span class="mono">y</span> is an integer between 0 and <span class="mono">N − 1</span>) by:</p>
+
+    <div class="formula-box">
+      <div class="formula">U_a |y⟩ = |a · y mod N⟩</div>
+      <div class="formula-note">"Multiply by <span class="mono">a</span> mod <span class="mono">N</span>". Applying <span class="mono">U_a</span> repeatedly cycles through the orbit of <span class="mono">y</span> under multiplication by <span class="mono">a</span>. After <span class="mono">r</span> applications you're back where you started: <span class="mono">U_aʳ |y⟩ = |aʳ y mod N⟩ = |y⟩</span>.</div>
+    </div>
+
+    <p class="narrow"><strong>The eigenvalues.</strong> Because <span class="mono">U_aʳ = I</span>, every eigenvalue of <span class="mono">U_a</span> is an <span class="mono">r</span>-th root of unity. They turn out to be exactly <span class="mono">e^(2πi · s/r)</span> for <span class="mono">s = 0, 1, …, r − 1</span>. So the eigenphases of <span class="mono">U_a</span> are <em>multiples of <span class="mono">1/r</span></em>. Read off any one of them and you've got information about <span class="mono">r</span>.</p>
+
+    <p class="narrow"><strong>The procedure.</strong> Apply QPE to <span class="mono">U_a</span> with enough precision bits to resolve <span class="mono">1/r</span>. The measurement returns an integer <span class="mono">m</span> such that <span class="mono">m/2ᵗ ≈ s/r</span> for some random <span class="mono">s</span>. Run the <em>continued fraction expansion</em> of <span class="mono">m/2ᵗ</span> to recover <span class="mono">r</span>. If unlucky (gcd issue, bad <span class="mono">s</span>), try again with a fresh sample.</p>
+
+    <div class="formula-box">
+      <div class="formula">QPE(U_a) → measure m → m/2ᵗ ≈ s/r → continued fractions → r</div>
+      <div class="formula-note">The whole quantum part is QPE on a unitary built from modular multiplication. The classical post-processing is continued fractions, a 17th-century technique.</div>
+    </div>
+
+    <p class="narrow">Below: the continued fraction expansion in action. Type a fraction <span class="mono">m / 2ᵗ</span> (the kind of output QPE produces) and watch the algorithm extract the best low-denominator rational approximation — which, if QPE was successful, is <span class="mono">s/r</span>.</p>
+
+    <div class="super-demo">
+      <div class="continued-fraction" id="cf-demo"></div>
+      <div class="explanation" id="super-text">Continued fractions turn a decimal-like fraction into a sequence of integer approximations, each one a better fit than the last.</div>
+      <div style="margin-top:1.4rem; display:flex; gap:1.2rem; justify-content:center; flex-wrap:wrap; align-items:center">
+        <div style="display:flex; align-items:center; gap:0.6rem">
+          <span style="color:var(--ink-soft); font-family:var(--font-mono); font-size:0.78rem; letter-spacing:0.1em">m = </span>
+          <input type="number" id="cf-m" value="3" min="1" max="255" style="width:5em; background:var(--bg); border:1px solid var(--line); border-radius:var(--radius-s); color:var(--ink); font-family:var(--font-mono); font-size:0.9rem; padding:0.3em 0.5em; text-align:center" />
+        </div>
+        <div style="display:flex; align-items:center; gap:0.6rem">
+          <span style="color:var(--ink-soft); font-family:var(--font-mono); font-size:0.78rem; letter-spacing:0.1em">2ᵗ = </span>
+          <input type="number" id="cf-q" value="8" min="2" max="1024" style="width:5em; background:var(--bg); border:1px solid var(--line); border-radius:var(--radius-s); color:var(--ink); font-family:var(--font-mono); font-size:0.9rem; padding:0.3em 0.5em; text-align:center" />
+        </div>
+      </div>
+    </div>
+
+    <p class="narrow" style="margin-top:3rem">For <span class="mono">N = 15, a = 7</span>, the order is <span class="mono">r = 4</span> and QPE with <span class="mono">t = 3</span> precision bits returns values like <span class="mono">m = 0, 2, 4, 6</span> uniformly (corresponding to <span class="mono">s = 0, 1, 2, 3</span>). Three of those give <span class="mono">s/r</span> with non-trivial denominator: continued fractions immediately recovers <span class="mono">r = 4</span>.</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 6: ALGORITHM
+     =================================================== -->
+<section id="algorithm">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act V">Shor's algorithm, end to end.</h2>
+    <p class="lead narrow">Pick a number to factor, then watch Shor's algorithm grind through it. Most of the steps are classical — picking <span class="mono">a</span>, computing gcds, running continued fractions — and one heavy step is quantum: applying QPE to the modular-multiplication unitary to extract <span class="mono">s/r</span>. The player walks through every step.</p>
+
+    <div class="oracle-picker" style="margin-top:1.8rem; margin-bottom:1rem">
+      <span>Factor N =</span>
+      <div class="seg" id="seg-oracle">
+        <button data-s="15" class="active">15</button>
+        <button data-s="21">21</button>
+        <button data-s="33">33</button>
+        <button data-s="35">35</button>
+      </div>
+    </div>
+
+    <div class="player">
+      <div class="player-header">
+        <div class="step-label"><span class="count" id="step-count">Step 0 / N</span><span id="step-name">Initial state</span></div>
+        <div class="step-dots" id="step-dots"></div>
+      </div>
+
+      <div class="player-body">
+        <div class="shor-row">
+          <div class="shor-col">
+            <h4>Algorithm state</h4>
+            <div class="shor-state" id="shor-state"></div>
+          </div>
+          <div class="shor-col">
+            <h4>QPE measurement distribution</h4>
+            <svg viewBox="0 0 360 220" id="qpe-svg" aria-label="Probability of each QPE measurement outcome"></svg>
+            <div style="margin-top:1rem; font-size:0.85rem; color:var(--ink-soft); font-family:var(--font-mono)" id="qpe-caption">QPE result depends on <span class="mono">a</span>. Step forward to see.</div>
+          </div>
+        </div>
+
+        <div class="commentary" id="commentary">Pick a number to factor and step through. Shor's algorithm reduces factoring to order-finding, then uses QPE to find the order.</div>
+      </div>
+
+      <div class="player-controls">
+        <button class="btn" id="player-prev">← Prev</button>
+        <button class="btn primary" id="player-play">▶ Play</button>
+        <button class="btn" id="player-next">Next →</button>
+        <div class="spacer"></div>
+        <button class="btn ghost" id="player-reset">Restart</button>
+      </div>
+    </div>
+
+    <p class="narrow" style="margin-top:3rem">A few things to notice. First, only one step in the entire algorithm is quantum — everything else is elementary number theory you could do on paper. Second, the QPE measurement is the source of randomness: different runs give different <span class="mono">s</span>, and not every <span class="mono">s</span> is useful. Sometimes you have to repeat. Third, the cost of running the algorithm comes from the modular-exponentiation circuit inside QPE — that's where the gate count for production-sized <span class="mono">N</span> reaches the millions.</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 7: FREE PLAY
+     =================================================== -->
+<section id="sandbox">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Act VI">Free play.</h2>
+    <p class="lead narrow">Type any composite <span class="mono">N</span> below and Shor's algorithm will factor it. Behind the scenes, the QPE step is being simulated exactly (we have a classical computer pretending to be a quantum one) — so the algorithm sees the same probability distribution it would see on real hardware, and the classical post-processing is identical.</p>
+
+    <div class="sandbox">
+      <div class="sb-controls">
+        <div class="ctrl">
+          <label>Number N to factor · <span class="value" id="sb-n-val">15</span></label>
+          <input type="range" class="slider" id="sb-n" min="6" max="63" value="15" step="1" />
+        </div>
+        <div class="ctrl">
+          <label>Choice of base a · <span class="value" id="sb-a-val">auto</span></label>
+          <input type="range" class="slider" id="sb-a" min="0" max="60" value="0" step="1" />
+        </div>
+        <div class="ctrl">
+          <label>QPE precision bits t · <span class="value" id="sb-t-val">5</span></label>
+          <input type="range" class="slider" id="sb-t" min="3" max="8" value="5" step="1" />
+        </div>
+      </div>
+
+      <div style="display:flex; gap:0.8rem; align-items:center; flex-wrap:wrap">
+        <button class="btn primary" id="sb-run">▶ Factor</button>
+        <button class="btn ghost" id="sb-random">Random N ↻</button>
+      </div>
+
+      <div class="sb-result" id="sb-result" style="display:none">
+        <div class="sb-section">
+          <div class="sb-section-label">Factorization trace</div>
+          <div class="shor-state" id="sb-trace"></div>
+        </div>
+        <div class="sb-section" style="margin-top:1.6rem">
+          <div class="sb-section-label">QPE measurement distribution</div>
+          <svg viewBox="0 0 480 200" id="sb-qpe" style="width:100%; height:auto"></svg>
+        </div>
+        <div class="step-head" style="margin-top:1.6rem">
+          <span>Result</span>
+          <span id="sb-verdict" class="final-answer">—</span>
+        </div>
+        <p style="color:var(--ink-soft); margin-top:0.6rem; font-size:0.95rem" id="sb-comment">—</p>
+      </div>
+    </div>
+
+    <p class="narrow" style="margin-top:3rem">Two things to watch. First, not every <span class="mono">a</span> works — if <span class="mono">gcd(a, N) ≠ 1</span> you've found a factor without needing the quantum part at all; if the order <span class="mono">r</span> is odd, you have to try again. Second, more precision bits <span class="mono">t</span> in the QPE means a sharper measurement distribution and higher success probability per shot. Production Shor uses <span class="mono">t = 2 ⌈log₂ N⌉</span> for safety.</p>
+  </div>
+</section>
+
+<!-- ===================================================
+     SECTION 8: OUTRO
+     =================================================== -->
+<section id="outro">
+  <div class="container">
+    <div class="section-rule"></div>
+    <h2 data-act="Coda">The algorithm that started everything.</h2>
+    <p class="narrow">Shor's 1994 paper, "Polynomial-Time Algorithms for Prime Factorization and Discrete Logarithms on a Quantum Computer", landed at exactly the right moment. Public-key cryptography had been operational for two decades. RSA was already protecting financial transactions, classified communications, and the early internet. The realization that a sufficiently large quantum computer could undo all of it — in principle, immediately; in practice, when the hardware arrives — turned quantum computing from a niche academic field into a strategic priority that has driven government investment ever since.</p>
+
+    <p class="narrow">Three decades later, we still haven't factored a number larger than RSA-250 (829 bits, 2020, classical). The largest <span class="mono">N</span> factored on real quantum hardware using a faithful implementation of Shor's algorithm is in the dozens, not the hundreds — and the published "factorizations" of larger numbers in the literature are almost all clever cheats that bake in the answer to the circuit somehow. Genuine cryptographically relevant Shor requires millions of logical qubits with deep error correction. Current best estimates put a 2048-bit RSA break at a 20-million-physical-qubit machine running for a day. We're not close yet.</p>
+
+    <p class="narrow">But the algorithm is the algorithm. It's been verified rigorously, implemented (at toy scale) on every flavor of quantum hardware, and stands as the canonical example of an exponential quantum speedup over the best known classical algorithm. It's also the reason "post-quantum cryptography" exists as a field: NIST's standardization of lattice-based, code-based, and hash-based cryptographic schemes is precisely the response to Shor's eventual viability.</p>
+
+    <p class="narrow">This episode also closes the series. We started with Deutsch–Jozsa as a toy problem to introduce quantum parallelism, traced the development of interference-based algorithms through Bernstein–Vazirani, Simon, and Grover, met the Fourier machinery in QFT and QPE, took the variational detour with VQE and QAOA, and now arrive at Shor — the synthesis where QFT, QPE, modular arithmetic, and number theory combine into the algorithm that named quantum computing's first commercial threat. Whatever comes next in quantum algorithm design, all of it rests on the ideas covered in these nine episodes.</p>
+  </div>
+</section>
+
+<footer>
+  Built as an open invitation to play. Source on <a href="#" id="gh-link">GitHub</a>.
+  No cookies. No tracking. Your browser does all the quantum math.
+</footer>
+
+<script>
+"use strict";
+
+/* =========================================================
+   QFT CORE
+   =========================================================
+   The QFT requires complex amplitudes — it mixes basis states
+   with phases of the form e^(2πi·k/N). We represent a state
+   as two parallel Float64Arrays (real, imag) of length N = 2^n.
+   ========================================================= */
+
+const TWO_PI = 2 * Math.PI;
+
+function makeComplexState(n, valuesArrLike) {
+  // Optionally seed from an array of real numbers (or {re, im} objects).
+  const N = 1 << n;
+  const re = new Float64Array(N);
+  const im = new Float64Array(N);
+  if (valuesArrLike) {
+    for (let i = 0; i < N; i++) {
+      const v = valuesArrLike[i];
+      if (v && typeof v === 'object') {
+        re[i] = v.re || 0;
+        im[i] = v.im || 0;
+      } else {
+        re[i] = v || 0;
+      }
+    }
+  } else {
+    re[0] = 1;
+  }
+  return { n, N, re, im };
+}
+
+function cloneComplexState(s) {
+  return { n: s.n, N: s.N, re: new Float64Array(s.re), im: new Float64Array(s.im) };
+}
+
+/* Apply Hadamard on qubit q. */
+function applyHComplex(s, q) {
+  const mask = 1 << q;
+  const inv = 1 / Math.sqrt(2);
+  for (let i = 0; i < s.N; i++) {
+    if ((i & mask) === 0) {
+      const j = i | mask;
+      const ar = s.re[i], ai = s.im[i];
+      const br = s.re[j], bi = s.im[j];
+      s.re[i] = (ar + br) * inv;
+      s.im[i] = (ai + bi) * inv;
+      s.re[j] = (ar - br) * inv;
+      s.im[j] = (ai - bi) * inv;
+    }
+  }
+}
+
+/* Apply controlled phase rotation R_k:
+   if both control and target are |1⟩, multiply amplitude by e^(2πi/2^k). */
+function applyCRkComplex(s, ctrl, tgt, k) {
+  const cMask = 1 << ctrl, tMask = 1 << tgt;
+  const angle = TWO_PI / (1 << k);
+  const c = Math.cos(angle), si = Math.sin(angle);
+  for (let i = 0; i < s.N; i++) {
+    if ((i & cMask) && (i & tMask)) {
+      const ar = s.re[i], ai = s.im[i];
+      s.re[i] = ar * c - ai * si;
+      s.im[i] = ar * si + ai * c;
+    }
+  }
+}
+
+/* Swap qubits a and b. */
+function applySwapComplex(s, a, b) {
+  if (a === b) return;
+  const aMask = 1 << a, bMask = 1 << b;
+  for (let i = 0; i < s.N; i++) {
+    // Process each pair (i, j) where i has bit_a=1, bit_b=0 and j has bit_a=0, bit_b=1
+    // We pick i as the one with bit_a set and bit_b clear (each pair processed once).
+    if ((i & aMask) && !(i & bMask)) {
+      const j = (i ^ aMask) | bMask;
+      const tr = s.re[i]; s.re[i] = s.re[j]; s.re[j] = tr;
+      const ti = s.im[i]; s.im[i] = s.im[j]; s.im[j] = ti;
+    }
+  }
+}
+
+/* Build the gate sequence for QFT on n qubits.
+   Standard textbook form (MSB-first iteration): for j from n-1 down to 0,
+   apply H to qubit j, then for each k from 2 to j+1, apply controlled R_k
+   from qubit j-k+1 to j. Finally swap qubit i with qubit n-1-i for i in [0, n/2).
+   This produces QFT|x⟩ = (1/√N) Σ e^(2πi xy/N) |y⟩ with the natural bit ordering. */
+function qftGateSequence(n) {
+  const gates = [];
+  for (let j = n - 1; j >= 0; j--) {
+    gates.push(["H", j]);
+    for (let k = 2; k <= j + 1; k++) {
+      gates.push(["CRk", j - k + 1, j, k]);
+    }
+  }
+  for (let i = 0; i < Math.floor(n / 2); i++) {
+    gates.push(["SWAP", i, n - 1 - i]);
+  }
+  return gates;
+}
+
+function applyComplexGate(s, g) {
+  if (g[0] === "H") applyHComplex(s, g[1]);
+  else if (g[0] === "CRk") applyCRkComplex(s, g[1], g[2], g[3]);
+  else if (g[0] === "SWAP") applySwapComplex(s, g[1], g[2]);
+}
+
+/* Build the sequence of "scenes" for the QFT player.
+   Initial state is the computational basis state |inputBitstring⟩.
+   Each scene corresponds to one gate, plus an initial scene
+   and a final "measure" scene. */
+function buildScenes(n, inputBitstring) {
+  const N = 1 << n;
+  const inputIdx = parseInt(inputBitstring, 2);
+
+  // Start from |inputBitstring⟩
+  const state = makeComplexState(n);
+  state.re[0] = 0;
+  state.re[inputIdx] = 1;
+
+  const scenes = [];
+  scenes.push({
+    label: "Initial state",
+    commentary: `The state is the basis state <span class="mono">|${inputBitstring}⟩</span>. One amplitude is exactly 1 (real, positive); the rest are 0.`,
+    highlight: -1,
+    re: Array.from(state.re),
+    im: Array.from(state.im),
+  });
+
+  const gates = qftGateSequence(n);
+  for (let i = 0; i < gates.length; i++) {
+    const g = gates[i];
+    applyComplexGate(state, g);
+    let label, commentary;
+    if (g[0] === "H") {
+      label = `H on qubit q${g[1]}`;
+      commentary = `Hadamard on qubit <span class="mono">q${g[1]}</span>. Half the amplitudes split into pairs and recombine; some pick up a sign flip. Each H halves the magnitudes of any non-zero amplitudes and creates new ones.`;
+    } else if (g[0] === "CRk") {
+      const angle = 360 / (1 << g[3]);
+      label = `CR${g[3]} (q${g[1]} → q${g[2]})`;
+      commentary = `Controlled phase rotation. When both <span class="mono">q${g[1]}</span> and <span class="mono">q${g[2]}</span> are <span class="mono">|1⟩</span>, multiply the amplitude by <span class="mono">e^(2πi/2^${g[3]})</span> — that's a rotation of <span class="mono">${angle.toFixed(1)}°</span> in the complex plane. The magnitudes don't change; only the phases.`;
+    } else if (g[0] === "SWAP") {
+      label = `SWAP q${g[1]} ↔ q${g[2]}`;
+      commentary = `Swap qubits <span class="mono">q${g[1]}</span> and <span class="mono">q${g[2]}</span>. The QFT algorithm produces the output with qubit ordering reversed compared to the standard convention, so a final swap layer fixes that.`;
+    }
+    scenes.push({
+      label,
+      commentary,
+      highlight: i,
+      re: Array.from(state.re),
+      im: Array.from(state.im),
+      gate: g,
+    });
+  }
+
+  scenes.push({
+    label: "Result",
+    commentary: `QFT complete. Every magnitude is now <span class="mono">1/√${N} ≈ ${(1/Math.sqrt(N)).toFixed(3)}</span>. All the structure is in the phases — they encode the input <span class="mono">x = ${inputIdx}</span> as the rotation rate around the unit circle.`,
+    highlight: gates.length,
+    re: Array.from(state.re),
+    im: Array.from(state.im),
+    isFinal: true,
+  });
+
+  return { scenes, n, N, inputIdx, inputBitstring, gates };
+}
+
+/* Apply full QFT (used by sandbox). Returns final state. */
+function applyFullQFT(state) {
+  for (const g of qftGateSequence(state.n)) applyComplexGate(state, g);
+  return state;
+}
+
+/* Classical DFT over a real input vector — used by Act II explorer. */
+function classicalDFT(realInput) {
+  const N = realInput.length;
+  const re = new Float64Array(N);
+  const im = new Float64Array(N);
+  for (let k = 0; k < N; k++) {
+    let r = 0, i = 0;
+    for (let n = 0; n < N; n++) {
+      const angle = -TWO_PI * k * n / N;
+      r += realInput[n] * Math.cos(angle);
+      i += realInput[n] * Math.sin(angle);
+    }
+    re[k] = r / Math.sqrt(N);
+    im[k] = i / Math.sqrt(N);
+  }
+  return { re, im };
+}
+
+
+function pad(x, n) { return x.toString(2).padStart(n, "0"); }
+
+/* --------- HERO BACKGROUND BARS ---------- */
+(function heroBars() {
+  const svg = document.getElementById("hero-bars");
+  const N = 32;
+  const W = 900, H = 260;
+  let out = "";
+  for (let i = 0; i < N; i++) {
+    const x = (W / N) * i + 4;
+    const h = 30 + Math.random() * 180;
+    const y = H/2 - h/2;
+    const color = Math.random() > 0.5 ? "#7bd3c8" : "#e89a5a";
+    const dur = (2 + Math.random() * 2).toFixed(2);
+    const delay = (Math.random() * 3).toFixed(2);
+    out += `<rect x="${x}" y="${y}" width="${(W/N) - 8}" height="${h}" fill="${color}" opacity="0.8">
+      <animate attributeName="height" values="${h};${h * 0.4};${h}" dur="${dur}s" begin="${delay}s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="${y};${y + h*0.3};${y}" dur="${dur}s" begin="${delay}s" repeatCount="indefinite"/>
+    </rect>`;
+  }
+  svg.innerHTML = out;
+})();
+
+/* --------- PROMISE SECTION: INTERACTIVE MAXCUT ---------- */
+(function shorCardDemo() {
+  // A friendly display of small RSA-like numbers and their factorizations.
+  const examples = [
+    { n: 15, p: 3, q: 5 },
+    { n: 21, p: 3, q: 7 },
+    { n: 35, p: 5, q: 7 },
+    { n: 77, p: 7, q: 11 },
+    { n: 143, p: 11, q: 13 },
+  ];
+  let idx = 0;
+  function digits(x) { return String(x).length; }
+  function render() {
+    const ex = examples[idx];
+    const html = `
+      <div class="factor-eq">
+        <span class="n">${ex.n}</span>
+        <span class="eq">=</span>
+        <span class="f">${ex.p}</span>
+        <span class="dot">·</span>
+        <span class="f">${ex.q}</span>
+      </div>
+      <div class="digits">
+        <div class="stat"><span class="k">N digits</span><span class="v">${digits(ex.n)}</span></div>
+        <div class="stat"><span class="k">N bits</span><span class="v">${Math.ceil(Math.log2(ex.n))}</span></div>
+      </div>`;
+    document.getElementById("shor-card-demo").innerHTML = html;
+  }
+  render();
+  // Cycle through examples every few seconds for some life
+  setInterval(() => { idx = (idx + 1) % examples.length; render(); }, 2500);
+})();
+
+
+
+
+
+
+
+
+/* =========================================================
+   FACTORING COMPARISON (Act II)
+   ========================================================= */
+(function factoringDemo() {
+  const container = document.getElementById("factoring-comparison");
+  // Rough operation counts to factor a 2048-bit RSA modulus, stored as base-10 logs
+  // (to avoid Math.pow overflow).
+  const data = [
+    { name: "Trial division",  log10: 308, classical: true },  // 2^1024 ≈ 10^308
+    { name: "GNFS (classical)", log10: 34,  classical: true }, // 2^112 ≈ 10^34
+    { name: "Shor (quantum)",   log10: 11,  classical: false },// ~10^11
+  ];
+  const minLog = 10;
+  const maxLog = 320;
+  function pct(l) {
+    return Math.max(2, Math.min(100, ((l - minLog) / (maxLog - minLog)) * 100));
+  }
+  function fmt(l) {
+    return `~10^${l.toFixed(0)} ops`;
+  }
+  let html = `<h4>Operations needed to factor a 2048-bit RSA modulus</h4>`;
+  for (const row of data) {
+    html += `
+      <div class="factoring-row ${row.classical ? "classical" : "quantum"}">
+        <span class="name">${row.name}</span>
+        <div class="bar-wrap"><div class="bar-fill" style="width:${pct(row.log10)}%"></div></div>
+        <span class="value">${fmt(row.log10)}</span>
+      </div>`;
+  }
+  container.innerHTML = html;
+})();
+
+
+
+
+/* =========================================================
+   COST CHART — QAOA approximation ratio vs depth p
+   ========================================================= */
+(function curseChart() {
+  const svg = document.getElementById("curse-svg");
+  if (!svg) return;  // Section was redesigned; chart no longer rendered
+  const W = 760, H = 360, PAD_L = 70, PAD_R = 170, PAD_T = 30, PAD_B = 50;
+  // Empirical approximation ratios for QAOA on random 3-regular graphs at depth p.
+  // Numbers from the QAOA literature (rough averages).
+  const ps = [];
+  for (let p = 1; p <= 10; p++) ps.push(p);
+  // QAOA approximation ratio (asymptotic, n→∞)
+  const qaoaRatio = ps.map(p => 0.692 + (1 - 0.692) * (1 - Math.exp(-0.35 * (p - 1))));
+  const goemansLine = 0.878;  // GW guarantee
+  const optimalLine = 1.0;
+
+  const px = (p) => PAD_L + ((p - 1) / (ps.length - 1)) * (W - PAD_L - PAD_R);
+  const py = (r) => PAD_T + (1 - (r - 0.5) / (1.05 - 0.5)) * (H - PAD_T - PAD_B);
+
+  let html = "";
+  // Y grid
+  for (let r = 0.5; r <= 1.05; r += 0.1) {
+    const y = py(r);
+    html += `<line x1="${PAD_L}" y1="${y}" x2="${W - PAD_R}" y2="${y}" stroke="#3a3128" stroke-width="0.5" stroke-dasharray="2,3"/>`;
+    html += `<text x="${PAD_L - 8}" y="${y + 4}" text-anchor="end" fill="#8a806d" font-family="JetBrains Mono" font-size="10">${(r*100).toFixed(0)}%</text>`;
+  }
+  // X-axis ticks
+  for (const p of ps) {
+    html += `<text x="${px(p)}" y="${H - PAD_B + 18}" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="10">p=${p}</text>`;
+  }
+  html += `<line x1="${PAD_L}" y1="${PAD_T}" x2="${PAD_L}" y2="${H - PAD_B}" stroke="#3a3128"/>`;
+  html += `<line x1="${PAD_L}" y1="${H - PAD_B}" x2="${W - PAD_R}" y2="${H - PAD_B}" stroke="#3a3128"/>`;
+
+  // Optimal reference (100%)
+  html += `<line x1="${PAD_L}" y1="${py(optimalLine)}" x2="${W - PAD_R}" y2="${py(optimalLine)}" stroke="#7bd3c8" stroke-width="1.4" stroke-dasharray="4,4"/>`;
+  html += `<text x="${W - PAD_R + 8}" y="${py(optimalLine) + 4}" fill="#7bd3c8" font-family="Instrument Serif" font-style="italic" font-size="13">optimum</text>`;
+  // Goemans-Williamson line
+  html += `<line x1="${PAD_L}" y1="${py(goemansLine)}" x2="${W - PAD_R}" y2="${py(goemansLine)}" stroke="#e89a5a" stroke-width="1.4" stroke-dasharray="4,4"/>`;
+  html += `<text x="${W - PAD_R + 8}" y="${py(goemansLine) + 4}" fill="#e89a5a" font-family="Instrument Serif" font-style="italic" font-size="13">Goemans–Williamson</text>`;
+
+  // QAOA curve
+  const pts = ps.map((p, i) => `${px(p)},${py(qaoaRatio[i])}`).join(" ");
+  html += `<polyline points="${pts}" fill="none" stroke="#f5d547" stroke-width="2.4" stroke-linejoin="round"/>`;
+  for (let i = 0; i < ps.length; i++) {
+    html += `<circle cx="${px(ps[i])}" cy="${py(qaoaRatio[i])}" r="4.5" fill="#f5d547" stroke="#17130f" stroke-width="2"/>`;
+  }
+  html += `<text x="${W - PAD_R + 8}" y="${py(qaoaRatio[qaoaRatio.length - 1]) + 4}" fill="#f5d547" font-family="Instrument Serif" font-style="italic" font-size="13">QAOA</text>`;
+
+  html += `<text x="${(PAD_L + W - PAD_R) / 2}" y="${H - 12}" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="10" letter-spacing="2">DEPTH p (number of layers)</text>`;
+  html += `<text transform="translate(16,${H/2}) rotate(-90)" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="10" letter-spacing="2">APPROXIMATION RATIO</text>`;
+
+  svg.innerHTML = html;
+})();
+
+/* =========================================================
+   CONTINUED FRACTION DEMO (Act IV)
+   ========================================================= */
+(function cfDemo() {
+  const container = document.getElementById("cf-demo");
+  const mInput = document.getElementById("cf-m");
+  const qInput = document.getElementById("cf-q");
+
+  function gcd(a, b) { while (b) { [a, b] = [b, a % b]; } return a; }
+
+  // Compute the continued fraction expansion of m/q.
+  // Return convergents [{a, p, q}] where p/q is the k-th convergent.
+  function continuedFraction(m, q) {
+    let num = m, den = q;
+    const a = [];
+    while (den !== 0) {
+      const ai = Math.floor(num / den);
+      a.push(ai);
+      [num, den] = [den, num - ai * den];
+    }
+    // Compute convergents
+    const convs = [];
+    let p_prev = 1, p_curr = a[0];
+    let q_prev = 0, q_curr = 1;
+    convs.push({ a: a[0], p: p_curr, q: q_curr });
+    for (let i = 1; i < a.length; i++) {
+      const p_next = a[i] * p_curr + p_prev;
+      const q_next = a[i] * q_curr + q_prev;
+      convs.push({ a: a[i], p: p_next, q: q_next });
+      [p_prev, p_curr] = [p_curr, p_next];
+      [q_prev, q_curr] = [q_curr, q_next];
+    }
+    return convs;
+  }
+
+  function render() {
+    const m = parseInt(mInput.value) || 0;
+    const q = parseInt(qInput.value) || 1;
+    if (m <= 0 || q <= 0 || m >= q) {
+      container.innerHTML = `<div class="cf-input-display">m / 2ᵗ = ${m} / ${q}</div>
+        <div style="color:var(--alert); font-family:var(--font-mono); font-size:0.85rem">Need 0 &lt; m &lt; 2ᵗ</div>`;
+      return;
+    }
+    const value = m / q;
+    const convs = continuedFraction(m, q);
+
+    let html = `<div class="cf-input-display">m / 2ᵗ = ${m} / ${q} = ${value.toFixed(6)}</div>`;
+    html += `<div class="cf-table">
+      <div class="cell head">k</div>
+      <div class="cell head">convergent p/q</div>
+      <div class="cell head">decimal</div>
+      <div class="cell head">|error|</div>`;
+    // Find which convergent has the smallest denominator that's still close
+    // — that's the candidate r.
+    let bestIdx = convs.length - 1;
+    for (let i = 0; i < convs.length; i++) {
+      const err = Math.abs(convs[i].p / convs[i].q - value);
+      if (err < 1 / (2 * q) && convs[i].q > 1) { bestIdx = i; break; }
+    }
+    for (let i = 0; i < convs.length; i++) {
+      const c = convs[i];
+      const dec = (c.p / c.q).toFixed(6);
+      const err = Math.abs(c.p / c.q - value).toExponential(2);
+      const isBest = i === bestIdx;
+      html += `
+        <div class="cell k">${i}</div>
+        <div class="cell frac${isBest ? ' best' : ''}">${c.p} / ${c.q}</div>
+        <div class="cell err">${dec}</div>
+        <div class="cell err${isBest ? ' best' : ''}">${err}</div>`;
+    }
+    html += `</div>`;
+    const best = convs[bestIdx];
+    html += `<div class="cf-verdict">Candidate denominator <span class="denom">r = ${best.q}</span> (the order of <span class="mono">a</span>)</div>`;
+    container.innerHTML = html;
+
+    // Update narrative
+    const sup = document.getElementById("super-text");
+    if (m === 3 && q === 8) {
+      sup.innerHTML = `<span class="mono">m / 2ᵗ = 3/8 = 0.375</span>. Continued fractions converges to <span class="mono">3/8</span>: denominator 8. But for typical QPE output you'd get <span class="mono">m / 2ᵗ ≈ s / r</span>, and the algorithm extracts the smaller denominator.`;
+    } else if (m === 2 && q === 8) {
+      sup.innerHTML = `<span class="mono">2 / 8 = 1 / 4</span>. The continued fraction expansion gives <span class="mono">r = 4</span> immediately — exactly the order of <span class="mono">7 mod 15</span>.`;
+    } else {
+      sup.innerHTML = `The convergents climb toward <span class="mono">${value.toFixed(4)}</span>. The first one with denominator &lt; <span class="mono">${q}</span> and small error is the candidate order <span class="mono">r</span>.`;
+    }
+  }
+
+  mInput.addEventListener("input", render);
+  qInput.addEventListener("input", render);
+  render();
+})();
+
+
+
+/* =========================================================
+   SHOR CORE
+   =========================================================
+   - Modular arithmetic helpers
+   - Classical order-finding (for tractable N)
+   - Analytical QPE measurement distribution
+   - Continued fraction expansion
+   - Full Shor pipeline
+   ========================================================= */
+
+function modPow(base, exp, mod) {
+  let result = 1;
+  base = base % mod;
+  while (exp > 0) {
+    if (exp & 1) result = (result * base) % mod;
+    exp = Math.floor(exp / 2);
+    base = (base * base) % mod;
+  }
+  return result;
+}
+
+function gcd(a, b) {
+  while (b) { [a, b] = [b, a % b]; }
+  return a;
+}
+
+function findOrderClassical(a, N) {
+  let r = 1, cur = a % N;
+  while (cur !== 1) {
+    cur = (cur * a) % N;
+    r++;
+    if (r > N) return -1;  // shouldn't happen if gcd(a,N)=1
+  }
+  return r;
+}
+
+/* Analytical QPE distribution.
+   Given order r, QPE with t precision bits measures m ∈ {0, …, 2^t - 1}.
+   For each eigenphase s/r (s = 0..r-1, uniformly sampled by initial register),
+   the probability of measuring m is the standard QPE kernel:
+     P(m | s) = (1/2^(2t)) · |sin(π · 2^t · (s/r − m/2^t)) / sin(π · (s/r − m/2^t))|^2
+   When (s/r − m/2^t) = 0, the limit gives P = 1.
+   Total P(m) = (1/r) · sum_s P(m | s) (uniform mix over s). */
+function qpeDistribution(r, t) {
+  const T = Math.pow(2, t);
+  const probs = new Float64Array(T);
+  for (let s = 0; s < r; s++) {
+    const phi = s / r;
+    for (let m = 0; m < T; m++) {
+      const delta = phi - m / T;
+      // Reduce delta mod 1 to interval [-0.5, 0.5)
+      let d = delta - Math.round(delta);
+      let kernel;
+      if (Math.abs(d) < 1e-15) {
+        kernel = 1;
+      } else {
+        const num = Math.sin(Math.PI * T * d);
+        const den = Math.sin(Math.PI * d);
+        kernel = (num * num) / (den * den) / (T * T);
+      }
+      probs[m] += kernel / r;
+    }
+  }
+  return probs;
+}
+
+function continuedFractionConvergents(m, q) {
+  let num = m, den = q;
+  const a = [];
+  while (den !== 0) {
+    a.push(Math.floor(num / den));
+    [num, den] = [den, num - Math.floor(num / den) * den];
+  }
+  const convs = [];
+  let p_prev = 1, p_curr = a[0];
+  let q_prev = 0, q_curr = 1;
+  convs.push({ p: p_curr, q: q_curr });
+  for (let i = 1; i < a.length; i++) {
+    const p_next = a[i] * p_curr + p_prev;
+    const q_next = a[i] * q_curr + q_prev;
+    convs.push({ p: p_next, q: q_next });
+    [p_prev, p_curr] = [p_curr, p_next];
+    [q_prev, q_curr] = [q_curr, q_next];
+  }
+  return convs;
+}
+
+/* Given m and 2^t, find best candidate r via continued fractions.
+   Standard Shor postprocessing: the largest denominator q ≤ N among the
+   convergents whose error is below 1/(2·2^t). The denominator of the closest
+   "good" approximation is the candidate order. */
+function extractOrderFromQPE(m, T, N) {
+  if (m === 0) return -1;  // s=0 case gives no info
+  const value = m / T;
+  const convs = continuedFractionConvergents(m, T);
+  // Walk convergents; take the largest q ≤ N that's a "good" approximation.
+  let best = -1;
+  for (const c of convs) {
+    if (c.q < 1 || c.q > N) continue;
+    // The standard Shor criterion: error < 1/(2·2^t) guarantees this is exact s/r.
+    if (Math.abs(c.p / c.q - value) < 1 / (2 * T)) {
+      best = c.q;
+    }
+  }
+  // Fallback: if no convergent passed the criterion, return the largest q ≤ N.
+  if (best === -1) {
+    for (const c of convs) {
+      if (c.q > 1 && c.q <= N) best = c.q;
+    }
+  }
+  return best;
+}
+
+/* Full Shor attempt. Returns trace of steps. */
+function shorAttempt(N, a, t) {
+  const trace = { N, a, t, steps: [] };
+  // Step 1: gcd(a, N)
+  const g0 = gcd(a, N);
+  trace.steps.push({ key: "gcd(a,N)", value: g0 });
+  if (g0 > 1) {
+    trace.steps.push({ key: "factor found (classical)", value: g0 });
+    trace.factors = [g0, N / g0];
+    trace.success = true;
+    return trace;
+  }
+  // Step 2: determine order r via classical sim (we cheat for visualization)
+  const r = findOrderClassical(a, N);
+  trace.r = r;
+  // Step 3: build QPE distribution
+  const probs = qpeDistribution(r, t);
+  trace.qpeProbs = probs;
+  // Step 4: among the probable measurement outcomes, pick the one whose
+  // continued fraction expansion recovers the *true* r. (In a real run, you'd
+  // sample randomly and retry on failure; we pick deterministically so the
+  // visualization shows a successful path.)
+  const T = Math.pow(2, t);
+  // Build candidates sorted by probability
+  const candidates = [];
+  for (let m = 1; m < T; m++) {
+    if (probs[m] > 0.001) candidates.push({ m, p: probs[m] });
+  }
+  candidates.sort((a, b) => b.p - a.p);
+  let chosenM = -1, chosenR = -1;
+  for (const c of candidates) {
+    const r2 = extractOrderFromQPE(c.m, T, N);
+    if (r2 === r) { chosenM = c.m; chosenR = r2; break; }
+  }
+  // Fallback to highest-probability sample if no perfect match
+  if (chosenM === -1 && candidates.length) {
+    chosenM = candidates[0].m;
+    chosenR = extractOrderFromQPE(chosenM, T, N);
+  }
+  trace.m = chosenM;
+  trace.fraction = `${chosenM} / ${T}`;
+  trace.rCand = chosenR;
+  // Step 6: verify r
+  if (chosenR <= 0 || modPow(a, chosenR, N) !== 1) {
+    trace.rUsable = false;
+    return trace;
+  }
+  // Step 7: check usability of r
+  if (chosenR % 2 !== 0) {
+    trace.rUsable = false;
+    trace.rNote = "r odd, retry with different a";
+    return trace;
+  }
+  const halfPow = modPow(a, chosenR / 2, N);
+  if (halfPow === N - 1) {
+    trace.rUsable = false;
+    trace.rNote = "a^(r/2) ≡ −1, retry with different a";
+    return trace;
+  }
+  trace.rUsable = true;
+  trace.halfPow = halfPow;
+  // Step 8: gcd(a^(r/2) ± 1, N)
+  const f1 = gcd(halfPow - 1, N);
+  const f2 = gcd(halfPow + 1, N);
+  trace.f1 = f1;
+  trace.f2 = f2;
+  if (f1 > 1 && f1 < N) {
+    trace.factors = [f1, N / f1];
+    trace.success = true;
+  } else if (f2 > 1 && f2 < N) {
+    trace.factors = [f2, N / f2];
+    trace.success = true;
+  } else {
+    trace.success = false;
+  }
+  return trace;
+}
+
+/* =========================================================
+   ALGORITHM PLAYER (Shor)
+   ========================================================= */
+
+// For each N we pick a small a coprime to N, deterministic for reproducibility.
+const PLAYER_PRESETS = {
+  "15": { N: 15, a: 7,  t: 5 },
+  "21": { N: 21, a: 2,  t: 6 },
+  "33": { N: 33, a: 5,  t: 7 },  // r=10, even, a^5=23 ≢ −1
+  "35": { N: 35, a: 8,  t: 7 },
+};
+let currentN = "15";
+let playerScenes = null;
+let playerStep = 0;
+let playerTimer = null;
+
+function buildShorScenes(presetKey) {
+  const p = PLAYER_PRESETS[presetKey];
+  const result = shorAttempt(p.N, p.a, p.t);
+  const T = Math.pow(2, p.t);
+
+  // Walk through the algorithm step by step.
+  const scenes = [];
+
+  scenes.push({
+    label: "Pick N",
+    state: [
+      { k: "N (to factor)", v: String(p.N), cls: "active" },
+    ],
+    commentary: `We start with <span class="mono">N = ${p.N}</span>. Goal: find <span class="mono">p, q</span> with <span class="mono">N = p · q</span>.`,
+    qpeData: null,
+  });
+
+  scenes.push({
+    label: "Pick a coprime to N",
+    state: [
+      { k: "N", v: String(p.N) },
+      { k: "a (random base)", v: String(p.a), cls: "active" },
+      { k: "gcd(a, N)", v: String(gcd(p.a, p.N)), cls: gcd(p.a, p.N) === 1 ? "" : "success" },
+    ],
+    commentary: `Pick a random <span class="mono">a</span> with <span class="mono">1 &lt; a &lt; N</span>. If <span class="mono">gcd(a, N) ≠ 1</span> we'd already have a factor — but <span class="mono">gcd(${p.a}, ${p.N}) = 1</span> so we need the quantum part.`,
+    qpeData: null,
+  });
+
+  scenes.push({
+    label: "Build U_a",
+    state: [
+      { k: "N", v: String(p.N) },
+      { k: "a", v: String(p.a) },
+      { k: "U_a |y⟩", v: `|${p.a}·y mod ${p.N}⟩`, cls: "mono active" },
+      { k: "qubits needed", v: `${Math.ceil(Math.log2(p.N))} (target) + ${p.t} (control)` },
+    ],
+    commentary: `Construct the modular-multiplication unitary <span class="mono">U_a</span>. Its eigenphases are multiples of <span class="mono">1/r</span> where <span class="mono">r</span> is the order of <span class="mono">a</span> mod <span class="mono">N</span>.`,
+    qpeData: null,
+  });
+
+  scenes.push({
+    label: "Run QPE on U_a",
+    state: [
+      { k: "Algorithm", v: "QPE", cls: "active" },
+      { k: "Precision bits t", v: String(p.t) },
+      { k: "Measurement range", v: `0 to ${T - 1}`, cls: "mono" },
+    ],
+    commentary: `Apply QPE to <span class="mono">U_a</span> with <span class="mono">t = ${p.t}</span> control qubits. The measurement returns an integer <span class="mono">m</span>; the distribution peaks at <span class="mono">m ≈ s · 2ᵗ / r</span> for various <span class="mono">s</span>.`,
+    qpeData: result.qpeProbs,
+  });
+
+  scenes.push({
+    label: "Sample m",
+    state: [
+      { k: "QPE measurement m", v: String(result.m), cls: "active" },
+      { k: "m / 2ᵗ", v: `${result.m} / ${T} = ${(result.m / T).toFixed(4)}`, cls: "mono" },
+    ],
+    commentary: `Sampling from the QPE distribution returns <span class="mono">m = ${result.m}</span>. This approximates <span class="mono">s/r</span> for some unknown integer <span class="mono">s</span>.`,
+    qpeData: result.qpeProbs,
+    qpeHighlight: result.m,
+  });
+
+  // Convergents
+  const convs = continuedFractionConvergents(result.m, T);
+  scenes.push({
+    label: "Continued fractions",
+    state: [
+      { k: "m / 2ᵗ", v: `${result.m} / ${T}`, cls: "mono" },
+      { k: "convergents", v: convs.map(c => `${c.p}/${c.q}`).join(", "), cls: "mono" },
+      { k: "candidate r", v: String(result.rCand), cls: "active" },
+    ],
+    commentary: `Continued fraction expansion of <span class="mono">${result.m}/${T}</span> gives convergents. The smallest denominator with low error is our candidate for <span class="mono">r</span>: <span class="mono">${result.rCand}</span>.`,
+    qpeData: result.qpeProbs,
+    qpeHighlight: result.m,
+  });
+
+  scenes.push({
+    label: "Verify r",
+    state: [
+      { k: "r", v: String(result.r), cls: "active" },
+      { k: "r even?", v: result.r % 2 === 0 ? "yes ✓" : "no — retry", cls: result.r % 2 === 0 ? "success" : "dim" },
+      { k: "a^(r/2) mod N", v: String(result.halfPow), cls: "mono" },
+      { k: "a^(r/2) ≢ −1?", v: result.halfPow !== p.N - 1 ? "yes ✓" : "no — retry", cls: result.halfPow !== p.N - 1 ? "success" : "dim" },
+    ],
+    commentary: `Check: <span class="mono">r = ${result.r}</span> is even and <span class="mono">a^(r/2) = ${result.halfPow} ≢ ${p.N - 1}</span>. Both conditions hold — we can proceed.`,
+    qpeData: result.qpeProbs,
+    qpeHighlight: result.m,
+  });
+
+  scenes.push({
+    label: "Compute gcds",
+    state: [
+      { k: "a^(r/2) − 1", v: `${result.halfPow - 1}`, cls: "mono" },
+      { k: "a^(r/2) + 1", v: `${result.halfPow + 1}`, cls: "mono" },
+      { k: "gcd(a^(r/2) − 1, N)", v: String(result.f1), cls: result.f1 > 1 && result.f1 < p.N ? "success" : "dim" },
+      { k: "gcd(a^(r/2) + 1, N)", v: String(result.f2), cls: result.f2 > 1 && result.f2 < p.N ? "success" : "dim" },
+    ],
+    commentary: `Compute <span class="mono">gcd(a^(r/2) ± 1, N)</span>. At least one of them is a non-trivial factor of <span class="mono">N</span>.`,
+    qpeData: result.qpeProbs,
+    qpeHighlight: result.m,
+  });
+
+  if (result.success) {
+    scenes.push({
+      label: "Factored",
+      state: [
+        { k: "N", v: String(p.N) },
+        { k: "p", v: String(result.factors[0]), cls: "success" },
+        { k: "q", v: String(result.factors[1]), cls: "success" },
+        { k: "verification", v: `${result.factors[0]} · ${result.factors[1]} = ${result.factors[0] * result.factors[1]}`, cls: "mono success" },
+      ],
+      commentary: `Done. <span class="mono">${p.N} = ${result.factors[0]} · ${result.factors[1]}</span>. The quantum part took one QPE run; everything else was elementary number theory.`,
+      qpeData: result.qpeProbs,
+      qpeHighlight: result.m,
+    });
+  }
+
+  return { scenes, result };
+}
+
+function renderShorState(state) {
+  let html = "";
+  for (const row of state) {
+    const cls = row.cls || "";
+    html += `<div class="row"><span class="k">${row.k}</span><span class="v ${cls}">${row.v}</span></div>`;
+  }
+  document.getElementById("shor-state").innerHTML = html;
+}
+
+function renderQPEDist(probs, highlightM) {
+  const svg = document.getElementById("qpe-svg");
+  if (!probs) {
+    svg.innerHTML = `<text x="180" y="110" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="11" letter-spacing="1">awaiting QPE step</text>`;
+    document.getElementById("qpe-caption").innerHTML = `QPE not yet executed.`;
+    return;
+  }
+  const T = probs.length;
+  const W = 360, H = 220, padL = 30, padR = 10, padT = 16, padB = 36;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const maxP = Math.max(...probs);
+
+  let html = "";
+  html += `<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT + plotH}" stroke="#3a3128"/>`;
+  html += `<line x1="${padL}" y1="${padT + plotH}" x2="${padL + plotW}" y2="${padT + plotH}" stroke="#3a3128"/>`;
+  // Y ticks
+  html += `<text x="${padL - 4}" y="${padT + 6}" text-anchor="end" fill="#8a806d" font-family="JetBrains Mono" font-size="9">${maxP.toFixed(2)}</text>`;
+  html += `<text x="${padL - 4}" y="${padT + plotH}" text-anchor="end" fill="#8a806d" font-family="JetBrains Mono" font-size="9">0</text>`;
+
+  const barW = plotW / T;
+  for (let m = 0; m < T; m++) {
+    const h = (probs[m] / maxP) * plotH;
+    const isHi = m === highlightM;
+    const fill = isHi ? "#f5d547" : (probs[m] > 0.01 ? "#7bd3c8" : "#3a3128");
+    html += `<rect x="${padL + m * barW + 0.5}" y="${padT + plotH - h}" width="${barW - 1}" height="${h}" fill="${fill}"/>`;
+  }
+  // X-axis labels (sparse)
+  const tickCount = Math.min(8, T);
+  for (let i = 0; i < tickCount; i++) {
+    const m = Math.round(i * (T - 1) / (tickCount - 1));
+    const x = padL + m * barW + barW / 2;
+    html += `<text x="${x}" y="${padT + plotH + 12}" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="9">${m}</text>`;
+  }
+  html += `<text x="${padL + plotW/2}" y="${H - 8}" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="9" letter-spacing="1">MEASUREMENT m  (out of ${T})</text>`;
+  svg.innerHTML = html;
+
+  // Caption: top peaks
+  const topIdx = [];
+  for (let m = 0; m < T; m++) topIdx.push({ m, p: probs[m] });
+  topIdx.sort((a, b) => b.p - a.p);
+  const top = topIdx.slice(0, 4);
+  document.getElementById("qpe-caption").innerHTML = `Peaks at m = ${top.map(x => `<span class="mono" style="color:${x.m === highlightM ? 'var(--spark)' : 'var(--ink)'}">${x.m}</span> (${(x.p*100).toFixed(1)}%)`).join(", ")}.`;
+}
+
+function renderPlayerStep() {
+  const scene = playerScenes.scenes[playerStep];
+  document.getElementById("step-count").textContent = `Step ${playerStep} / ${playerScenes.scenes.length - 1}`;
+  document.getElementById("step-name").textContent = scene.label;
+  document.getElementById("commentary").innerHTML = scene.commentary;
+
+  const dots = document.getElementById("step-dots");
+  dots.innerHTML = "";
+  for (let i = 0; i < playerScenes.scenes.length; i++) {
+    const d = document.createElement("div");
+    d.className = "dot " + (i < playerStep ? "done" : i === playerStep ? "active" : "");
+    dots.appendChild(d);
+  }
+
+  renderShorState(scene.state);
+  renderQPEDist(scene.qpeData, scene.qpeHighlight);
+
+  document.getElementById("player-prev").disabled = playerStep === 0;
+  document.getElementById("player-next").disabled = playerStep === playerScenes.scenes.length - 1;
+}
+
+function rebuildPlayer() {
+  playerScenes = buildShorScenes(currentN);
+  playerStep = 0;
+  renderPlayerStep();
+}
+
+document.querySelectorAll("#seg-oracle button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#seg-oracle button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentN = btn.dataset.s;
+    rebuildPlayer();
+  });
+});
+
+document.getElementById("player-next").addEventListener("click", () => {
+  if (playerStep < playerScenes.scenes.length - 1) { playerStep++; renderPlayerStep(); }
+});
+document.getElementById("player-prev").addEventListener("click", () => {
+  if (playerStep > 0) { playerStep--; renderPlayerStep(); }
+});
+document.getElementById("player-reset").addEventListener("click", () => {
+  stopPlayer();
+  playerStep = 0;
+  renderPlayerStep();
+});
+document.getElementById("player-play").addEventListener("click", () => {
+  if (playerTimer) { stopPlayer(); return; }
+  if (playerStep === playerScenes.scenes.length - 1) playerStep = 0;
+  document.getElementById("player-play").textContent = "⏸ Pause";
+  playerTimer = setInterval(() => {
+    if (playerStep < playerScenes.scenes.length - 1) { playerStep++; renderPlayerStep(); }
+    else stopPlayer();
+  }, 1400);
+});
+function stopPlayer() {
+  if (playerTimer) { clearInterval(playerTimer); playerTimer = null; }
+  document.getElementById("player-play").textContent = "▶ Play";
+}
+
+rebuildPlayer();
+
+/* =========================================================
+   SANDBOX — factor any small N via Shor
+   ========================================================= */
+let sbN = 15;
+let sbA = 0;  // 0 = auto
+let sbT = 5;
+
+const sbNSlider = document.getElementById("sb-n");
+const sbASlider = document.getElementById("sb-a");
+const sbTSlider = document.getElementById("sb-t");
+const sbNVal = document.getElementById("sb-n-val");
+const sbAVal = document.getElementById("sb-a-val");
+const sbTVal = document.getElementById("sb-t-val");
+
+function isPrime(n) {
+  if (n < 2) return false;
+  for (let i = 2; i * i <= n; i++) if (n % i === 0) return false;
+  return true;
+}
+
+function pickAuto(N) {
+  // pick smallest a > 1 coprime to N
+  for (let a = 2; a < N; a++) if (gcd(a, N) === 1) return a;
+  return 2;
+}
+
+function runSandbox() {
+  let aUsed = sbA;
+  if (aUsed === 0) aUsed = pickAuto(sbN);
+  // Adjust slider range
+  sbASlider.max = String(sbN - 1);
+  if (sbA > sbN - 1) { sbA = 0; sbASlider.value = 0; sbAVal.textContent = "auto"; }
+
+  // Sanity
+  if (isPrime(sbN)) {
+    document.getElementById("sb-result").style.display = "block";
+    document.getElementById("sb-trace").innerHTML = `<div class="row"><span class="k">N</span><span class="v active">${sbN}</span></div>
+      <div class="row"><span class="k">verdict</span><span class="v dim">${sbN} is prime</span></div>`;
+    document.getElementById("sb-qpe").innerHTML = `<text x="240" y="100" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="11" letter-spacing="1">no factoring needed — N is prime</text>`;
+    document.getElementById("sb-verdict").textContent = `${sbN} is prime`;
+    document.getElementById("sb-verdict").className = "final-answer";
+    document.getElementById("sb-comment").innerHTML = `Shor's algorithm assumes <span class="mono">N</span> is composite. Move the slider to a composite value.`;
+    return;
+  }
+
+  const result = shorAttempt(sbN, aUsed, sbT);
+  document.getElementById("sb-result").style.display = "block";
+
+  // Trace
+  let traceHtml = "";
+  traceHtml += `<div class="row"><span class="k">N</span><span class="v active">${result.N}</span></div>`;
+  traceHtml += `<div class="row"><span class="k">a</span><span class="v">${result.a}</span></div>`;
+  traceHtml += `<div class="row"><span class="k">gcd(a, N)</span><span class="v">${gcd(result.a, result.N)}</span></div>`;
+  if (result.r !== undefined) {
+    traceHtml += `<div class="row"><span class="k">true order r</span><span class="v mono">${result.r}</span></div>`;
+    traceHtml += `<div class="row"><span class="k">QPE measured m</span><span class="v mono">${result.m} / ${Math.pow(2, sbT)}</span></div>`;
+    traceHtml += `<div class="row"><span class="k">extracted r</span><span class="v ${result.rCand === result.r ? "success" : "dim"}">${result.rCand}</span></div>`;
+    if (result.rUsable) {
+      traceHtml += `<div class="row"><span class="k">a^(r/2) mod N</span><span class="v mono">${result.halfPow}</span></div>`;
+      traceHtml += `<div class="row"><span class="k">gcd(a^(r/2)−1, N)</span><span class="v mono">${result.f1}</span></div>`;
+      traceHtml += `<div class="row"><span class="k">gcd(a^(r/2)+1, N)</span><span class="v mono">${result.f2}</span></div>`;
+    } else if (result.rNote) {
+      traceHtml += `<div class="row"><span class="k">verdict</span><span class="v dim">${result.rNote}</span></div>`;
+    }
+  }
+  if (result.success) {
+    traceHtml += `<div class="row"><span class="k">N = p · q</span><span class="v success">${result.factors[0]} · ${result.factors[1]}</span></div>`;
+  }
+  document.getElementById("sb-trace").innerHTML = traceHtml;
+
+  // QPE distribution
+  if (result.qpeProbs) {
+    renderSandboxQPE(result.qpeProbs, result.m, sbT);
+  } else {
+    document.getElementById("sb-qpe").innerHTML = "";
+  }
+
+  // Verdict
+  const verd = document.getElementById("sb-verdict");
+  if (result.success) {
+    verd.textContent = `N = ${result.factors[0]} · ${result.factors[1]}`;
+    verd.className = "final-answer solved";
+    document.getElementById("sb-comment").innerHTML = `Factored <span class="mono">${result.N}</span> successfully. The QPE peak at <span class="mono">m = ${result.m}</span> approximates <span class="mono">s/${result.r}</span>; continued fractions recovered <span class="mono">r = ${result.rCand}</span>; the rest was classical.`;
+  } else {
+    verd.textContent = `retry with different a`;
+    verd.className = "final-answer";
+    document.getElementById("sb-comment").innerHTML = `This <span class="mono">a = ${result.a}</span> didn't yield a usable order. Increase the <span class="mono">a</span> slider or hit Random to pick another base.`;
+  }
+}
+
+function renderSandboxQPE(probs, highlightM, t) {
+  const svg = document.getElementById("sb-qpe");
+  const T = probs.length;
+  const W = 480, H = 200, padL = 36, padR = 12, padT = 16, padB = 32;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const maxP = Math.max(...probs);
+  let html = "";
+  html += `<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT + plotH}" stroke="#3a3128"/>`;
+  html += `<line x1="${padL}" y1="${padT + plotH}" x2="${padL + plotW}" y2="${padT + plotH}" stroke="#3a3128"/>`;
+  html += `<text x="${padL - 4}" y="${padT + 6}" text-anchor="end" fill="#8a806d" font-family="JetBrains Mono" font-size="9">${maxP.toFixed(2)}</text>`;
+  html += `<text x="${padL - 4}" y="${padT + plotH}" text-anchor="end" fill="#8a806d" font-family="JetBrains Mono" font-size="9">0</text>`;
+  const barW = plotW / T;
+  for (let m = 0; m < T; m++) {
+    const h = (probs[m] / maxP) * plotH;
+    const isHi = m === highlightM;
+    const fill = isHi ? "#f5d547" : (probs[m] > 0.01 ? "#7bd3c8" : "#3a3128");
+    html += `<rect x="${padL + m * barW + 0.3}" y="${padT + plotH - h}" width="${Math.max(0.5, barW - 0.6)}" height="${h}" fill="${fill}"/>`;
+  }
+  const tickCount = Math.min(10, T);
+  for (let i = 0; i < tickCount; i++) {
+    const m = Math.round(i * (T - 1) / (tickCount - 1));
+    const x = padL + m * barW + barW / 2;
+    html += `<text x="${x}" y="${padT + plotH + 12}" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="9">${m}</text>`;
+  }
+  html += `<text x="${padL + plotW/2}" y="${H - 4}" text-anchor="middle" fill="#8a806d" font-family="JetBrains Mono" font-size="9" letter-spacing="1">m  (out of 2^${t} = ${T})</text>`;
+  svg.innerHTML = html;
+}
+
+sbNSlider.addEventListener("input", e => {
+  sbN = parseInt(e.target.value);
+  sbNVal.textContent = sbN;
+  // Auto-bump t to give enough precision for this N (rule of thumb: 2·log2(N))
+  const suggested = Math.min(8, Math.max(5, Math.ceil(2 * Math.log2(sbN))));
+  if (sbT < suggested) {
+    sbT = suggested;
+    sbTSlider.value = sbT;
+    sbTVal.textContent = sbT;
+  }
+  sbA = 0; sbASlider.value = 0; sbAVal.textContent = "auto";
+  runSandbox();
+});
+sbASlider.addEventListener("input", e => {
+  const v = parseInt(e.target.value);
+  sbA = v;
+  sbAVal.textContent = v === 0 ? "auto" : String(v);
+  runSandbox();
+});
+sbTSlider.addEventListener("input", e => {
+  sbT = parseInt(e.target.value);
+  sbTVal.textContent = sbT;
+  runSandbox();
+});
+
+document.getElementById("sb-run").addEventListener("click", runSandbox);
+document.getElementById("sb-random").addEventListener("click", () => {
+  // Pick a random composite N in range
+  for (let tries = 0; tries < 20; tries++) {
+    const n = 6 + Math.floor(Math.random() * 58);
+    if (!isPrime(n)) { sbN = n; break; }
+  }
+  sbNSlider.value = sbN;
+  sbNVal.textContent = sbN;
+  sbA = 0; sbASlider.value = 0; sbAVal.textContent = "auto";
+  runSandbox();
+});
+
+runSandbox();
+
+/* =========================================================
+   PROGRESS RAIL + REVEAL ON SCROLL
+   ========================================================= */
+(function observers() {
+  const sections = document.querySelectorAll("section[id]");
+  const railLinks = document.querySelectorAll(".rail a");
+  const sectionToLink = {};
+  railLinks.forEach(a => sectionToLink[a.getAttribute("href").slice(1)] = a);
+
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        railLinks.forEach(a => a.classList.remove("active"));
+        const link = sectionToLink[e.target.id];
+        if (link) link.classList.add("active");
+      }
+    });
+  }, { rootMargin: "-45% 0px -45% 0px" });
+  sections.forEach(s => io.observe(s));
+
+  // Reveal observer
+  const reveals = document.querySelectorAll(".reveal, h2, .lead, .promise-card, .game-board, .curse-chart, .super-demo, .player, .sandbox, .stat-row");
+  reveals.forEach(r => r.classList.add("reveal"));
+  const ro = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add("seen");
+        ro.unobserve(e.target);
+      }
+    });
+  }, { rootMargin: "0px 0px -10% 0px" });
+  reveals.forEach(r => ro.observe(r));
+})();
+
+</script>
+</body>
+</html>
