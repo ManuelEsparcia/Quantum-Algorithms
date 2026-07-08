@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neutral-Atom Playground — Rydberg Blockade</title>
+<style>
+  :root{--bg:#F1EFE8;--card:#FAF9F5;--ink:#2C2C2A;--sub:#5F5E5A;--border:#D5D2C6;--accent:#3A5A6C;--coral:#C0492F;--atom:#0F6E56;--atomfill:#9FE1CB;--ryd:#C0492F;--rydfill:#F5C4B3}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{background:var(--bg);color:var(--ink);font-family:Georgia,'Times New Roman',serif;line-height:1.5;padding:24px 16px 60px}
+  .wrap{max-width:900px;margin:0 auto}
+  header{margin-bottom:24px}
+  h1{font-size:clamp(22px,4vw,30px);font-weight:700}
+  .tagline{color:var(--sub);font-size:clamp(13px,2.4vw,15px);margin-top:8px;font-style:italic}
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:18px}
+  .panel h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);font-weight:700;margin-bottom:14px}
+  canvas{display:block;width:100%;height:auto;background:transparent;touch-action:none;cursor:grab}
+  canvas:active{cursor:grabbing}
+  .row{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:6px}
+  .btn{font-family:inherit;font-size:13px;padding:9px 14px;cursor:pointer;background:var(--accent);color:#fff;border:none;border-radius:6px}
+  .btn:hover{background:#2f4a59}
+  .btn.secondary{background:var(--bg);color:var(--ink);border:1px solid var(--border)}
+  .btn.secondary:hover{background:#ECEAE1}
+  .btn:focus-visible{outline:3px solid rgba(58,90,108,.35);outline-offset:1px}
+  .ctrl{display:flex;align-items:center;gap:10px;font-size:13px}
+  .hint{font-size:13px;color:var(--sub);margin-top:12px;min-height:20px}
+  .hint b{color:var(--atom)}
+  .hint .blocked{color:var(--coral)}
+  footer{margin-top:26px;font-size:12px;color:var(--sub);text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>The Rydberg Blockade</h1>
+    <p class="tagline">Excite an atom and a blockade sphere appears. Any atom inside it can't excite too — it's blocked, and the pair entangles. Drag atoms to draw the interaction.</p>
+  </header>
+
+  <div class="panel">
+    <h2>Atom array</h2>
+    <canvas id="stage" width="820" height="380" aria-label="Draggable neutral atoms with a Rydberg blockade region"></canvas>
+    <p class="hint" id="hint">Drag any atom. Click an atom to excite it to the Rydberg state.</p>
+    <div class="row">
+      <div class="ctrl">
+        <label for="radius">Blockade radius:</label>
+        <input type="range" id="radius" min="70" max="220" step="5" value="140">
+      </div>
+      <button class="btn secondary" id="reset">Reset atoms</button>
+    </div>
+  </div>
+
+  <footer>Part of the Quantum Hardware series by Manuel Esparcia Cantos · Article 4 of 8</footer>
+</div>
+
+<script>
+const cv=document.getElementById('stage'), ctx=cv.getContext('2d');
+const hint=document.getElementById('hint');
+let Rb=140; // blockade radius
+let atoms=[]; // {x,y,excited}
+let drag=null, dragMoved=false;
+
+function reset(){
+  atoms=[
+    {x:200,y:150,excited:false},
+    {x:480,y:150,excited:false},
+    {x:340,y:270,excited:false},
+    {x:620,y:250,excited:false},
+  ];
+  draw(); setHint();
+}
+
+function excitedAtom(){ return atoms.find(a=>a.excited); }
+
+function isBlocked(a){
+  const e=excitedAtom();
+  if(!e || e===a) return false;
+  const d=Math.hypot(a.x-e.x,a.y-e.y);
+  return d<=Rb;
+}
+
+function draw(){
+  ctx.clearRect(0,0,cv.width,cv.height);
+  const e=excitedAtom();
+  // blockade sphere
+  if(e){
+    ctx.beginPath(); ctx.arc(e.x,e.y,Rb,0,2*Math.PI);
+    ctx.fillStyle='rgba(192,73,47,0.08)'; ctx.fill();
+    ctx.strokeStyle='rgba(192,73,47,0.5)'; ctx.lineWidth=1.5; ctx.setLineDash([6,5]);
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  // entanglement links (excited <-> blocked)
+  if(e){
+    atoms.forEach(a=>{
+      if(a!==e && isBlocked(a)){
+        ctx.strokeStyle='#0F6E56'; ctx.lineWidth=2; ctx.setLineDash([5,4]);
+        ctx.beginPath(); ctx.moveTo(e.x,e.y); ctx.lineTo(a.x,a.y); ctx.stroke(); ctx.setLineDash([]);
+      }
+    });
+  }
+  // atoms
+  atoms.forEach(a=>{
+    const blocked=isBlocked(a);
+    let r=16;
+    ctx.beginPath(); ctx.arc(a.x,a.y,r,0,2*Math.PI);
+    if(a.excited){ ctx.fillStyle='#F5C4B3'; ctx.strokeStyle='#C0492F'; }
+    else if(blocked){ ctx.fillStyle='#EFD9CF'; ctx.strokeStyle='#C0492F'; }
+    else { ctx.fillStyle='#9FE1CB'; ctx.strokeStyle='#0F6E56'; }
+    ctx.fill(); ctx.lineWidth = a.excited||blocked ? 3 : 1.5; ctx.stroke();
+    // label
+    ctx.fillStyle='#5F5E5A'; ctx.font='11px Georgia'; ctx.textAlign='center';
+    if(a.excited) ctx.fillText('Rydberg', a.x, a.y-24);
+    else if(blocked) ctx.fillText('blocked', a.x, a.y-24);
+  });
+}
+
+function setHint(){
+  const e=excitedAtom();
+  if(!e){ hint.innerHTML='Drag any atom. Click an atom to excite it to the Rydberg state.'; return; }
+  const blocked=atoms.filter(a=>a!==e && isBlocked(a));
+  if(blocked.length) hint.innerHTML=`One atom is <b>Rydberg-excited</b>; <span class="blocked">${blocked.length} neighbor${blocked.length>1?'s are':' is'} blocked</span> and entangled with it. Drag them out of the sphere to release.`;
+  else hint.innerHTML='One atom is <b>Rydberg-excited</b>. No atom is within the blockade radius — drag one inside to entangle.';
+}
+
+function atAtom(mx,my){
+  for(let i=atoms.length-1;i>=0;i--){
+    if(Math.hypot(mx-atoms[i].x,my-atoms[i].y)<=20) return atoms[i];
+  }
+  return null;
+}
+function pos(e){
+  const r=cv.getBoundingClientRect();
+  const cx=(e.touches?e.touches[0].clientX:e.clientX)-r.left;
+  const cy=(e.touches?e.touches[0].clientY:e.clientY)-r.top;
+  return {x:cx*(cv.width/r.width), y:cy*(cv.height/r.height)};
+}
+
+function down(e){
+  const p=pos(e); const a=atAtom(p.x,p.y);
+  if(a){ drag=a; dragMoved=false; e.preventDefault(); }
+}
+function move(e){
+  if(!drag) return;
+  const p=pos(e); drag.x=Math.max(20,Math.min(cv.width-20,p.x)); drag.y=Math.max(20,Math.min(cv.height-20,p.y));
+  dragMoved=true; draw(); setHint(); e.preventDefault();
+}
+function up(e){
+  if(drag && !dragMoved){
+    // treat as click: toggle excitation (only one excited at a time)
+    const wasExcited=drag.excited;
+    atoms.forEach(a=>a.excited=false);
+    drag.excited=!wasExcited;
+    draw(); setHint();
+  }
+  drag=null;
+}
+cv.addEventListener('mousedown',down); window.addEventListener('mousemove',move); window.addEventListener('mouseup',up);
+cv.addEventListener('touchstart',down,{passive:false}); cv.addEventListener('touchmove',move,{passive:false}); cv.addEventListener('touchend',up);
+
+document.getElementById('radius').addEventListener('input',e=>{Rb=+e.target.value;draw();setHint();});
+document.getElementById('reset').addEventListener('click',reset);
+reset();
+</script>
+</body>
+</html>

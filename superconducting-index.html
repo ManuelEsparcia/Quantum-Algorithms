@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Superconducting Qubit Playground — Rabi Oscillation</title>
+<style>
+  :root{
+    --bg:#F1EFE8; --card:#FAF9F5; --ink:#2C2C2A; --sub:#5F5E5A;
+    --border:#D5D2C6; --accent:#3A5A6C; --coral:#C0492F; --lead:#0F6E56;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{background:var(--bg);color:var(--ink);font-family:Georgia,'Times New Roman',serif;line-height:1.5;padding:24px 16px 60px}
+  .wrap{max-width:920px;margin:0 auto}
+  header{margin-bottom:24px}
+  h1{font-size:clamp(22px,4vw,30px);font-weight:700}
+  .tagline{color:var(--sub);font-size:clamp(13px,2.4vw,15px);margin-top:8px;font-style:italic}
+  .layout{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  @media(max-width:760px){.layout{grid-template-columns:1fr}}
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px}
+  .panel h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);font-weight:700;margin-bottom:14px}
+  canvas{display:block;width:100%;height:auto;background:transparent}
+  .controls{grid-column:1 / -1}
+  .ctrl-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 24px}
+  @media(max-width:520px){.ctrl-grid{grid-template-columns:1fr}}
+  .slider-row .slider-label{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+  .slider-label .name{font-size:13px;font-weight:700}
+  .slider-label .val{font-size:12px;color:var(--sub);font-variant-numeric:tabular-nums}
+  .slider-desc{font-size:11px;color:var(--sub);margin-bottom:6px;line-height:1.3}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:5px;background:var(--border);border-radius:3px;outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:18px;height:18px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid var(--card);box-shadow:0 1px 3px rgba(0,0,0,.25)}
+  input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid var(--card)}
+  input[type=range]:focus-visible{box-shadow:0 0 0 3px rgba(58,90,108,.35)}
+  .readout{display:flex;gap:20px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
+  .stat{font-size:12px;color:var(--sub)}
+  .stat b{display:block;font-size:18px;color:var(--ink);font-variant-numeric:tabular-nums}
+  .presets{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .preset-btn{font-family:inherit;font-size:12px;padding:7px 11px;cursor:pointer;background:var(--bg);color:var(--ink);border:1px solid var(--border);border-radius:6px}
+  .preset-btn:hover{background:#ECEAE1;border-color:var(--accent)}
+  .preset-btn:focus-visible{outline:3px solid rgba(58,90,108,.35);outline-offset:1px}
+  footer{margin-top:26px;font-size:12px;color:var(--sub);text-align:center}
+  footer a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Driving a Transmon</h1>
+    <p class="tagline">A microwave pulse rotates the qubit. Watch the Rabi oscillation on the Bloch sphere — then watch coherence eat it.</p>
+  </header>
+
+  <div class="layout">
+    <div class="panel">
+      <h2>Bloch sphere</h2>
+      <canvas id="bloch" width="380" height="380" aria-label="Bloch sphere showing the qubit state vector"></canvas>
+    </div>
+    <div class="panel">
+      <h2>Excited-state population</h2>
+      <canvas id="plot" width="380" height="380" aria-label="Plot of excited state population over time"></canvas>
+    </div>
+
+    <div class="panel controls">
+      <h2>Controls</h2>
+      <div class="ctrl-grid">
+        <div class="slider-row">
+          <div class="slider-label"><span class="name">Pulse length</span><span class="val" id="v-t">1.00 μs</span></div>
+          <div class="slider-desc">How long the drive is applied.</div>
+          <input type="range" id="s-t" min="0" max="4" step="0.02" value="1">
+        </div>
+        <div class="slider-row">
+          <div class="slider-label"><span class="name">Drive amplitude (Rabi rate)</span><span class="val" id="v-rabi">5.0 MHz</span></div>
+          <div class="slider-desc">Stronger drive → faster rotation.</div>
+          <input type="range" id="s-rabi" min="0.5" max="15" step="0.1" value="5">
+        </div>
+        <div class="slider-row">
+          <div class="slider-label"><span class="name">Detuning</span><span class="val" id="v-det">0.0 MHz</span></div>
+          <div class="slider-desc">Off-resonance tilts the rotation axis; you stop reaching |1⟩ fully.</div>
+          <input type="range" id="s-det" min="-10" max="10" step="0.1" value="0">
+        </div>
+        <div class="slider-row">
+          <div class="slider-label"><span class="name">Coherence T2</span><span class="val" id="v-t2">∞</span></div>
+          <div class="slider-desc">Finite T2 damps the oscillation envelope.</div>
+          <input type="range" id="s-t2" min="0.2" max="10.2" step="0.1" value="10.2">
+        </div>
+      </div>
+      <div class="readout">
+        <div class="stat">Final |1⟩ population<b id="r-pop">—</b></div>
+        <div class="stat">Effective Rabi freq<b id="r-eff">—</b></div>
+        <div class="stat">Pulse for an X gate (π)<b id="r-pi">—</b></div>
+      </div>
+      <div class="presets">
+        <button class="preset-btn" data-p="xgate">Set an X gate (π-pulse)</button>
+        <button class="preset-btn" data-p="detuned">Add detuning</button>
+        <button class="preset-btn" data-p="decohere">Short T2</button>
+        <button class="preset-btn" data-p="reset">Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <footer>Part of the Quantum Hardware series by Manuel Esparcia Cantos · Article 2 of 8</footer>
+</div>
+
+<script>
+const P = { t:1.0, rabi:5.0, det:0.0, t2:10.2 }; // t2=10.2 treated as infinite
+
+const el = id => document.getElementById(id);
+const bloch = el('bloch'), bctx = bloch.getContext('2d');
+const plot = el('plot'), pctx = plot.getContext('2d');
+
+// physics: on-resonance Rabi with detuning + T2 damping
+// effective Rabi Omega_eff = sqrt(rabi^2 + det^2); population of |1> at time t:
+// P1(t) = (rabi^2 / Omega_eff^2) * sin^2(pi * Omega_eff * t) * exp(-t/T2)
+function pop1(t){
+  const O = Math.sqrt(P.rabi*P.rabi + P.det*P.det); // MHz
+  const amp = P.rabi*P.rabi / (O*O);
+  const osc = Math.pow(Math.sin(Math.PI*O*t), 2);
+  const damp = P.t2 > 10 ? 1 : Math.exp(-t / P.t2);
+  return amp * osc * damp;
+}
+// Bloch vector at time t (approx, on the amp-damped great circle / tilted axis)
+function blochVec(t){
+  const O = Math.sqrt(P.rabi*P.rabi + P.det*P.det);
+  const theta = 2*Math.PI*O*t;           // rotation angle
+  const tilt = Math.atan2(P.det, P.rabi); // axis tilt from x toward z
+  // rotation about tilted axis n=(cos tilt? ) — simplified: axis in x-z plane
+  // start at |0> = +z. Rotate about axis a=(sin? ) Use Rodrigues.
+  const ax = Math.cos(tilt), az = Math.sin(tilt), ay = 0; // axis in x-z plane
+  let v = [0,0,1];
+  const c = Math.cos(theta), s = Math.sin(theta);
+  const dot = ax*v[0]+ay*v[1]+az*v[2];
+  const cross = [ay*v[2]-az*v[1], az*v[0]-ax*v[2], ax*v[1]-ay*v[0]];
+  let r = [
+    v[0]*c + cross[0]*s + ax*dot*(1-c),
+    v[1]*c + cross[1]*s + ay*dot*(1-c),
+    v[2]*c + cross[2]*s + az*dot*(1-c)
+  ];
+  // apply T2 damping by shrinking transverse comps and pulling toward +z a bit
+  if(P.t2 <= 10){
+    const d = Math.exp(-t/P.t2);
+    r[0]*=d; r[1]*=d;
+  }
+  return r;
+}
+
+function drawBloch(){
+  const w=bloch.width,h=bloch.height,cx=w/2,cy=h/2,R=140;
+  bctx.clearRect(0,0,w,h);
+  // sphere outline
+  bctx.strokeStyle='#C9C6BA'; bctx.lineWidth=1.5;
+  bctx.beginPath(); bctx.arc(cx,cy,R,0,2*Math.PI); bctx.stroke();
+  // equator ellipse
+  bctx.beginPath(); bctx.ellipse(cx,cy,R,R*0.34,0,0,2*Math.PI); bctx.stroke();
+  // vertical axis
+  bctx.strokeStyle='#DDD9CD';
+  bctx.beginPath(); bctx.moveTo(cx,cy-R); bctx.lineTo(cx,cy+R); bctx.stroke();
+  // labels
+  bctx.fillStyle='#5F5E5A'; bctx.font='14px Georgia'; bctx.textAlign='center';
+  bctx.fillText('|0⟩',cx,cy-R-8);
+  bctx.fillText('|1⟩',cx,cy+R+18);
+  // state vector (project 3D -> 2D: x right, z up, y depth)
+  const r = blochVec(P.t);
+  const px = cx + r[0]*R + r[1]*R*0.30;
+  const py = cy - r[2]*R + r[1]*R*0.10;
+  bctx.strokeStyle='#C0492F'; bctx.lineWidth=3;
+  bctx.beginPath(); bctx.moveTo(cx,cy); bctx.lineTo(px,py); bctx.stroke();
+  bctx.fillStyle='#C0492F';
+  bctx.beginPath(); bctx.arc(px,py,6,0,2*Math.PI); bctx.fill();
+}
+
+function drawPlot(){
+  const w=plot.width,h=plot.height,ml=40,mb=30,mt=14,mr=12;
+  const pw=w-ml-mr, ph=h-mt-mb;
+  pctx.clearRect(0,0,w,h);
+  // axes
+  pctx.strokeStyle='#C9C6BA'; pctx.lineWidth=1;
+  pctx.beginPath(); pctx.moveTo(ml,mt); pctx.lineTo(ml,mt+ph); pctx.lineTo(ml+pw,mt+ph); pctx.stroke();
+  pctx.fillStyle='#5F5E5A'; pctx.font='11px Georgia'; pctx.textAlign='right';
+  pctx.fillText('1.0',ml-6,mt+6); pctx.fillText('0.5',ml-6,mt+ph/2+4); pctx.fillText('0',ml-6,mt+ph+4);
+  pctx.textAlign='center'; pctx.fillText('pulse length →',ml+pw/2,h-6);
+  pctx.save(); pctx.translate(12,mt+ph/2); pctx.rotate(-Math.PI/2); pctx.fillText('P(|1⟩)',0,0); pctx.restore();
+  // curve of P1 vs t over 0..4us
+  pctx.strokeStyle='#3A5A6C'; pctx.lineWidth=2; pctx.beginPath();
+  const TMAX=4;
+  for(let i=0;i<=240;i++){
+    const t=(i/240)*TMAX;
+    const y=pop1(t);
+    const X=ml + (t/TMAX)*pw;
+    const Y=mt + (1-y)*ph;
+    i?pctx.lineTo(X,Y):pctx.moveTo(X,Y);
+  }
+  pctx.stroke();
+  // current-time marker
+  const Xc=ml + (P.t/TMAX)*pw;
+  pctx.strokeStyle='#C0492F'; pctx.lineWidth=1.5; pctx.setLineDash([4,3]);
+  pctx.beginPath(); pctx.moveTo(Xc,mt); pctx.lineTo(Xc,mt+ph); pctx.stroke(); pctx.setLineDash([]);
+  const yc=pop1(P.t);
+  pctx.fillStyle='#C0492F'; pctx.beginPath(); pctx.arc(Xc,mt+(1-yc)*ph,5,0,2*Math.PI); pctx.fill();
+}
+
+function updateReadouts(){
+  const O=Math.sqrt(P.rabi*P.rabi+P.det*P.det);
+  el('r-pop').textContent = (pop1(P.t)*100).toFixed(1)+'%';
+  el('r-eff').textContent = O.toFixed(1)+' MHz';
+  el('r-pi').textContent = (1/(2*O)).toFixed(3)+' μs';
+}
+
+function render(){ drawBloch(); drawPlot(); updateReadouts(); }
+
+// wire sliders
+function bind(id,key,fmt){
+  const s=el('s-'+id);
+  s.addEventListener('input',()=>{
+    P[key]=+s.value;
+    el('v-'+id).textContent = fmt(+s.value);
+    render();
+  });
+}
+bind('t','t', v=>v.toFixed(2)+' μs');
+bind('rabi','rabi', v=>v.toFixed(1)+' MHz');
+bind('det','det', v=>v.toFixed(1)+' MHz');
+bind('t2','t2', v=> v>10 ? '∞' : v.toFixed(1)+' μs');
+
+const PRE={
+  xgate:  ()=>{ P.rabi=5; P.det=0; P.t2=10.2; P.t=1/(2*5); },   // pi-pulse time
+  detuned:()=>{ P.det=4; },
+  decohere:()=>{ P.t2=1.0; P.t=2.0; },
+  reset:  ()=>{ P.t=1; P.rabi=5; P.det=0; P.t2=10.2; },
+};
+document.querySelectorAll('.preset-btn').forEach(b=>{
+  b.addEventListener('click',()=>{
+    PRE[b.dataset.p]();
+    // sync UI
+    el('s-t').value=P.t; el('v-t').textContent=P.t.toFixed(2)+' μs';
+    el('s-rabi').value=P.rabi; el('v-rabi').textContent=P.rabi.toFixed(1)+' MHz';
+    el('s-det').value=P.det; el('v-det').textContent=P.det.toFixed(1)+' MHz';
+    el('s-t2').value=P.t2; el('v-t2').textContent=P.t2>10?'∞':P.t2.toFixed(1)+' μs';
+    render();
+  });
+});
+
+render();
+</script>
+</body>
+</html>

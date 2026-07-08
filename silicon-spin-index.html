@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Silicon Spin Playground — Quantum Dot</title>
+<style>
+  :root{--bg:#F1EFE8;--card:#FAF9F5;--ink:#2C2C2A;--sub:#5F5E5A;--border:#D5D2C6;--accent:#3A5A6C;--gate:#534AB7;--well:#185FA5;--electron:#185FA5;--efill:#B5D4F4;--coral:#C0492F;--ok:#0F6E56}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{background:var(--bg);color:var(--ink);font-family:Georgia,'Times New Roman',serif;line-height:1.5;padding:24px 16px 60px}
+  .wrap{max-width:900px;margin:0 auto}
+  header{margin-bottom:24px}
+  h1{font-size:clamp(22px,4vw,30px);font-weight:700}
+  .tagline{color:var(--sub);font-size:clamp(13px,2.4vw,15px);margin-top:8px;font-style:italic}
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:18px}
+  .panel h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);font-weight:700;margin-bottom:14px}
+  canvas{display:block;width:100%;height:auto;background:transparent}
+  .slider-row{margin-bottom:16px}
+  .slider-label{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+  .slider-label .name{font-size:13px;font-weight:700}
+  .slider-label .val{font-size:12px;color:var(--sub);font-variant-numeric:tabular-nums}
+  .slider-desc{font-size:11px;color:var(--sub);margin-bottom:6px}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:5px;background:var(--border);border-radius:3px;outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:18px;height:18px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid var(--card);box-shadow:0 1px 3px rgba(0,0,0,.25)}
+  input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid var(--card)}
+  input[type=range]:focus-visible{box-shadow:0 0 0 3px rgba(58,90,108,.35)}
+  .occ{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;margin-left:6px}
+  .occ.zero{background:#EDE9E0;color:#5F5E5A}
+  .occ.one{background:#D6EFE4;color:#0F6E56}
+  .occ.two{background:#F5D9D0;color:#C0492F}
+  .hint{font-size:13px;color:var(--sub);margin-top:12px;min-height:20px}
+  .btn{font-family:inherit;font-size:13px;padding:9px 14px;cursor:pointer;background:var(--accent);color:#fff;border:none;border-radius:6px;margin-top:8px}
+  .btn:hover{background:#2f4a59} .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn:focus-visible{outline:3px solid rgba(58,90,108,.35);outline-offset:1px}
+  footer{margin-top:26px;font-size:12px;color:var(--sub);text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Loading a Quantum Dot</h1>
+    <p class="tagline">Everything here is a voltage — the same control a transistor uses. Form the well, load exactly one electron, then rotate its spin.</p>
+  </header>
+
+  <div class="panel">
+    <h2>The device</h2>
+    <canvas id="stage" width="820" height="320" aria-label="Quantum dot potential well with an electron"></canvas>
+    <p class="hint" id="hint">Raise the gate voltage to deepen the well until it holds exactly one electron.</p>
+  </div>
+
+  <div class="panel">
+    <h2>Controls</h2>
+    <div class="slider-row">
+      <div class="slider-label"><span class="name">Gate voltage <span class="occ zero" id="occ">empty</span></span><span class="val" id="v-gate">0.30 V</span></div>
+      <div class="slider-desc">Deepens the potential well. Too shallow = no electron; too deep = two.</div>
+      <input type="range" id="s-gate" min="0" max="1" step="0.01" value="0.30">
+    </div>
+    <div class="slider-row">
+      <div class="slider-label"><span class="name">Spin drive (EDSR)</span><span class="val" id="v-drive">off</span></div>
+      <div class="slider-desc">Rotates the electron spin. Only works once one electron is loaded.</div>
+      <input type="range" id="s-drive" min="0" max="1" step="0.01" value="0">
+    </div>
+    <div class="hint" id="spinhint">Spin readout appears once a single electron is loaded.</div>
+  </div>
+
+  <footer>Part of the Quantum Hardware series by Manuel Esparcia Cantos · Article 6 of 8</footer>
+</div>
+
+<script>
+const cv=document.getElementById('stage'), ctx=cv.getContext('2d');
+let Vg=0.30, drive=0;
+
+function occupancy(){
+  if(Vg<0.35) return 0;
+  if(Vg<0.72) return 1;
+  return 2;
+}
+function spinPop(){ // population in |1> (spin-down) from drive
+  return Math.sin(Math.PI*drive)**2 * (Math.sin(drive*8)*0+1); // simple: sin^2(pi*drive)
+}
+
+function draw(){
+  ctx.clearRect(0,0,cv.width,cv.height);
+  const w=cv.width;
+  // substrate + oxide + gates (cross-section)
+  ctx.fillStyle='#D3D1C7'; ctx.fillRect(80,220,w-160,60); // silicon
+  ctx.strokeStyle='#B4B2A9'; ctx.strokeRect(80,220,w-160,60);
+  ctx.fillStyle='#5F5E5A'; ctx.font='11px Georgia'; ctx.textAlign='center';
+  ctx.fillText('silicon-28 substrate', w/2, 268);
+  ctx.fillStyle='#ECEAE1'; ctx.fillRect(80,205,w-160,15); ctx.strokeRect(80,205,w-160,15);
+  // gates
+  const gy=175, gw=70;
+  [-1,0,1].forEach(k=>{
+    const gx=w/2 + k*150 - gw/2;
+    ctx.fillStyle='#CECBF6'; ctx.strokeStyle='#534AB7';
+    ctx.fillRect(gx,gy,gw,30); ctx.strokeRect(gx,gy,gw,30);
+  });
+  ctx.fillStyle='#3C3489'; ctx.fillText('gate electrodes', w/2, gy-8);
+
+  // potential well curve (depth scales with Vg)
+  const depth = Vg*120;
+  const cx=w/2, baseY=120;
+  ctx.strokeStyle='#185FA5'; ctx.lineWidth=2; ctx.beginPath();
+  for(let i=0;i<=200;i++){
+    const x=cx-160 + (i/200)*320;
+    const u=(x-cx)/90;
+    const y=baseY - depth*Math.exp(-u*u) + depth; // well dips down
+    i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+  }
+  ctx.stroke();
+  ctx.fillStyle='#185FA5'; ctx.textAlign='left'; ctx.fillText('potential', cx-160, baseY-10);
+
+  // electron(s)
+  const occ=occupancy();
+  const wellBottomY = baseY + depth - depth + 0; // approx
+  const eY = baseY + depth - depth*Math.exp(0) + depth; // at center u=0 -> baseY
+  const centerY = baseY; // bottom of well is around baseY (since exp(0)=1 -> baseY-depth+depth=baseY)
+  if(occ===1){
+    drawElectron(cx, centerY-2);
+  } else if(occ===2){
+    drawElectron(cx-16, centerY-2);
+    drawElectron(cx+16, centerY-2);
+  }
+}
+
+function drawElectron(x,y){
+  ctx.beginPath(); ctx.arc(x,y,13,0,2*Math.PI);
+  ctx.fillStyle='#B5D4F4'; ctx.strokeStyle='#185FA5'; ctx.lineWidth=2; ctx.fill(); ctx.stroke();
+  // spin arrow: direction depends on drive
+  const p=spinPop(); // 0=up,1=down
+  const angle = Math.PI*p; // 0 -> up, pi -> down
+  const ax=Math.sin(angle)*0, ay=-Math.cos(angle)*10;
+  ctx.strokeStyle='#185FA5'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(x, y+ (p>0.5?-8:8)); ctx.lineTo(x, y+(p>0.5?8:-8)); ctx.stroke();
+  // arrowhead
+  const hy = p>0.5 ? y+8 : y-8;
+  ctx.beginPath();
+  if(p>0.5){ ctx.moveTo(x-4,hy-4); ctx.lineTo(x,hy); ctx.lineTo(x+4,hy-4);}
+  else{ ctx.moveTo(x-4,hy+4); ctx.lineTo(x,hy); ctx.lineTo(x+4,hy+4);}
+  ctx.stroke();
+}
+
+function updateUI(){
+  document.getElementById('v-gate').textContent=Vg.toFixed(2)+' V';
+  document.getElementById('v-drive').textContent = drive>0 ? Math.round(spinPop()*100)+'% down' : 'off';
+  const occ=occupancy();
+  const badge=document.getElementById('occ');
+  badge.className='occ '+(occ===0?'zero':occ===1?'one':'two');
+  badge.textContent = occ===0?'empty':occ===1?'1 electron':'2 electrons';
+  const hint=document.getElementById('hint');
+  if(occ===0) hint.textContent='Well too shallow — no electron trapped. Raise the gate voltage.';
+  else if(occ===1) hint.innerHTML='Exactly <b style="color:#0F6E56">one electron</b> loaded — this is a qubit. Now drive its spin below.';
+  else hint.innerHTML='<b style="color:#C0492F">Two electrons</b> — too deep. This is no longer a clean qubit. Lower the voltage.';
+  const sh=document.getElementById('spinhint');
+  if(occ===1){
+    sh.innerHTML = drive>0 ? `Spin driven to <b>${Math.round(spinPop()*100)}%</b> spin-down (|1⟩).` : 'Electron in |0⟩ (spin-up). Apply the spin drive to rotate it.';
+  } else {
+    sh.textContent='Spin readout appears once a single electron is loaded.';
+  }
+  draw();
+}
+
+document.getElementById('s-gate').addEventListener('input',e=>{Vg=+e.target.value;updateUI();});
+document.getElementById('s-drive').addEventListener('input',e=>{drive=+e.target.value;updateUI();});
+updateUI();
+</script>
+</body>
+</html>

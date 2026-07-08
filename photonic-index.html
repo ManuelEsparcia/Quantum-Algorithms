@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Photonic Playground — Fusion Measurement</title>
+<style>
+  :root{--bg:#F1EFE8;--card:#FAF9F5;--ink:#2C2C2A;--sub:#5F5E5A;--border:#D5D2C6;--accent:#3A5A6C;--wg:#185FA5;--photon:#C0492F;--ok:#0F6E56;--fail:#B23A2E}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{background:var(--bg);color:var(--ink);font-family:Georgia,'Times New Roman',serif;line-height:1.5;padding:24px 16px 60px}
+  .wrap{max-width:900px;margin:0 auto}
+  header{margin-bottom:24px}
+  h1{font-size:clamp(22px,4vw,30px);font-weight:700}
+  .tagline{color:var(--sub);font-size:clamp(13px,2.4vw,15px);margin-top:8px;font-style:italic}
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:18px}
+  .panel h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);font-weight:700;margin-bottom:14px}
+  canvas{display:block;width:100%;height:auto;background:transparent}
+  .row{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:10px}
+  .btn{font-family:inherit;font-size:13px;padding:9px 14px;cursor:pointer;background:var(--accent);color:#fff;border:none;border-radius:6px}
+  .btn:hover{background:#2f4a59}
+  .btn.secondary{background:var(--bg);color:var(--ink);border:1px solid var(--border)}
+  .btn.secondary:hover{background:#ECEAE1}
+  .btn:focus-visible{outline:3px solid rgba(58,90,108,.35);outline-offset:1px}
+  .ctrl{display:flex;align-items:center;gap:10px;font-size:13px}
+  .stats{display:flex;gap:24px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
+  .stat{font-size:12px;color:var(--sub)}
+  .stat b{display:block;font-size:20px;color:var(--ink);font-variant-numeric:tabular-nums}
+  .stat.ok b{color:var(--ok)} .stat.fail b{color:var(--fail)}
+  .hint{font-size:13px;color:var(--sub);margin-top:12px;min-height:20px}
+  footer{margin-top:26px;font-size:12px;color:var(--sub);text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Fusion: The Probabilistic Gate</h1>
+    <p class="tagline">Photons can't be forced to interact, so entanglement is built by measurement. Each fusion only sometimes succeeds — and every failure is a resource thrown away.</p>
+  </header>
+
+  <div class="panel">
+    <h2>Fusion attempt</h2>
+    <canvas id="stage" width="820" height="300" aria-label="Two resource states meeting at a fusion measurement"></canvas>
+    <p class="hint" id="hint">Fire a fusion. Watch whether the two resource states merge or drop out.</p>
+    <div class="row">
+      <button class="btn" id="fire">Fire one fusion</button>
+      <button class="btn secondary" id="burst">Fire 20</button>
+      <button class="btn secondary" id="reset">Reset counts</button>
+      <div class="ctrl">
+        <label for="psucc">Success prob:</label>
+        <input type="range" id="psucc" min="0.2" max="0.9" step="0.05" value="0.5">
+        <span id="plabel">50%</span>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat ok">Successes<b id="s-ok">0</b></div>
+      <div class="stat fail">Failures (discarded)<b id="s-fail">0</b></div>
+      <div class="stat">Success rate<b id="s-rate">—</b></div>
+      <div class="stat">Resource states used<b id="s-total">0</b></div>
+    </div>
+  </div>
+
+  <footer>Part of the Quantum Hardware series by Manuel Esparcia Cantos · Article 5 of 8</footer>
+</div>
+
+<script>
+const cv=document.getElementById('stage'), ctx=cv.getContext('2d');
+const hint=document.getElementById('hint');
+let P=0.5, ok=0, fail=0, anim=null, lastResult=null;
+
+function drawScene(progress, result){
+  ctx.clearRect(0,0,cv.width,cv.height);
+  const midX=cv.width/2, topY=110, botY=190, fuseX=midX;
+  // waveguides for two resource states
+  ctx.strokeStyle='#185FA5'; ctx.lineWidth=2.5;
+  ctx.beginPath(); ctx.moveTo(80,topY); ctx.lineTo(fuseX-40,topY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(80,botY); ctx.lineTo(fuseX-40,botY); ctx.stroke();
+  // resource state labels
+  ctx.fillStyle='#5F5E5A'; ctx.font='12px Georgia'; ctx.textAlign='left';
+  ctx.fillText('resource state A',80,topY-14);
+  ctx.fillText('resource state B',80,botY+24);
+  // fusion box
+  ctx.fillStyle='#ECEAE1'; ctx.strokeStyle='#3A5A6C'; ctx.lineWidth=1.5;
+  ctx.fillRect(fuseX-40,topY-20,80,botY-topY+40); ctx.strokeRect(fuseX-40,topY-20,80,botY-topY+40);
+  ctx.fillStyle='#3A5A6C'; ctx.textAlign='center'; ctx.font='11px Georgia';
+  ctx.fillText('fusion',fuseX,(topY+botY)/2-4); ctx.fillText('measure',fuseX,(topY+botY)/2+12);
+  // output
+  ctx.strokeStyle='#185FA5';
+  ctx.beginPath(); ctx.moveTo(fuseX+40,(topY+botY)/2); ctx.lineTo(cv.width-80,(topY+botY)/2); ctx.stroke();
+
+  // photons traveling in
+  if(progress<0.5){
+    const t=progress/0.5;
+    const ax=80+(fuseX-40-80)*t;
+    ctx.fillStyle='#C0492F';
+    ctx.beginPath(); ctx.arc(ax,topY,7,0,2*Math.PI); ctx.fill();
+    ctx.beginPath(); ctx.arc(ax,botY,7,0,2*Math.PI); ctx.fill();
+  } else {
+    // result phase
+    const t=(progress-0.5)/0.5;
+    if(result==='ok'){
+      // merged cluster travels out
+      const ox=(fuseX+40)+(cv.width-80-(fuseX+40))*t;
+      ctx.fillStyle='#0F6E56';
+      ctx.beginPath(); ctx.arc(ox,(topY+botY)/2,9,0,2*Math.PI); ctx.fill();
+      ctx.fillStyle='#0F6E56'; ctx.font='13px Georgia'; ctx.textAlign='center';
+      ctx.fillText('merged cluster ✓',cv.width-160,(topY+botY)/2-18);
+    } else {
+      // failure: X mark, photons drop
+      ctx.strokeStyle='#B23A2E'; ctx.lineWidth=3;
+      const cx=fuseX, cy=(topY+botY)/2;
+      ctx.beginPath(); ctx.moveTo(cx-14,cy-14); ctx.lineTo(cx+14,cy+14); ctx.moveTo(cx+14,cy-14); ctx.lineTo(cx-14,cy+14); ctx.stroke();
+      ctx.fillStyle='#B23A2E'; ctx.font='13px Georgia'; ctx.textAlign='center';
+      ctx.fillText('fusion failed — states discarded ✗',fuseX,botY+50);
+    }
+  }
+}
+
+function updateStats(){
+  const total=ok+fail;
+  document.getElementById('s-ok').textContent=ok;
+  document.getElementById('s-fail').textContent=fail;
+  document.getElementById('s-total').textContent=total;
+  document.getElementById('s-rate').textContent = total? Math.round(ok/total*100)+'%' : '—';
+}
+
+function runOne(cb){
+  const result = Math.random()<P ? 'ok':'fail';
+  let t=0;
+  cancelAnimationFrame(anim);
+  function step(){
+    t+=0.04;
+    drawScene(Math.min(t,1), result);
+    if(t<1){ anim=requestAnimationFrame(step); }
+    else{
+      if(result==='ok'){ ok++; hint.innerHTML='Fusion <b style="color:#0F6E56">succeeded</b> — the two resource states merged into a larger cluster.'; }
+      else{ fail++; hint.innerHTML='Fusion <b style="color:#B23A2E">failed</b> — both resource states are discarded. This is why redundancy is unavoidable.'; }
+      updateStats();
+      if(cb) cb();
+    }
+  }
+  step();
+}
+
+document.getElementById('fire').addEventListener('click',()=>runOne());
+document.getElementById('burst').addEventListener('click',()=>{
+  let n=0;
+  (function next(){ if(n++>=20){ return; } runOne(next); })();
+});
+document.getElementById('reset').addEventListener('click',()=>{ ok=0;fail=0;updateStats();drawScene(0,null);hint.textContent='Counts reset. Fire a fusion.'; });
+document.getElementById('psucc').addEventListener('input',e=>{P=+e.target.value;document.getElementById('plabel').textContent=Math.round(P*100)+'%';});
+
+drawScene(0,null); updateStats();
+</script>
+</body>
+</html>

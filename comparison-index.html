@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quantum Hardware Comparison Playground</title>
+<style>
+  :root {
+    --bg: #F1EFE8;
+    --card: #FAF9F5;
+    --ink: #2C2C2A;
+    --sub: #5F5E5A;
+    --border: #D5D2C6;
+    --accent: #3A5A6C;
+    --lead: #0F6E56;
+    --lead-bg: #D6EFE4;
+    --coral: #C0492F;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.5;
+    padding: 24px 16px 60px;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; }
+  header { margin-bottom: 28px; }
+  h1 { font-size: clamp(22px, 4vw, 30px); font-weight: 700; letter-spacing: -0.01em; }
+  .tagline { color: var(--sub); font-size: clamp(13px, 2.4vw, 15px); margin-top: 8px; font-style: italic; }
+  .layout { display: grid; grid-template-columns: 300px 1fr; gap: 24px; }
+  @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+  .panel h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--accent); font-weight: 700; margin-bottom: 16px;
+  }
+  .slider-row { margin-bottom: 18px; }
+  .slider-row:last-child { margin-bottom: 0; }
+  .slider-label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .slider-label .name { font-size: 14px; font-weight: 700; }
+  .slider-label .val { font-size: 13px; color: var(--sub); font-variant-numeric: tabular-nums; }
+  .slider-desc { font-size: 11.5px; color: var(--sub); margin-bottom: 8px; line-height: 1.35; }
+  input[type=range] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 5px;
+    background: var(--border); border-radius: 3px; outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; width: 20px; height: 20px;
+    border-radius: 50%; background: var(--accent); cursor: pointer;
+    border: 2px solid var(--card); box-shadow: 0 1px 3px rgba(0,0,0,.25);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 20px; height: 20px; border-radius: 50%; background: var(--accent);
+    cursor: pointer; border: 2px solid var(--card); box-shadow: 0 1px 3px rgba(0,0,0,.25);
+  }
+  input[type=range]:focus-visible { box-shadow: 0 0 0 3px rgba(58,90,108,.35); }
+
+  .presets { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--border); }
+  .preset-btn {
+    font-family: inherit; font-size: 12px; padding: 7px 11px; cursor: pointer;
+    background: var(--bg); color: var(--ink); border: 1px solid var(--border); border-radius: 6px;
+    transition: background .12s, border-color .12s;
+  }
+  .preset-btn:hover { background: #ECEAE1; border-color: var(--accent); }
+  .preset-btn:focus-visible { outline: 3px solid rgba(58,90,108,.35); outline-offset: 1px; }
+
+  .ranking h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); font-weight: 700; margin-bottom: 4px; }
+  .ranking .hint { font-size: 12px; color: var(--sub); margin-bottom: 18px; font-style: italic; }
+  .bar-row { margin-bottom: 12px; transition: transform .45s cubic-bezier(.22,.61,.36,1); }
+  .bar-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+  .bar-name { font-size: 14px; font-weight: 700; }
+  .bar-rank { font-size: 12px; color: var(--sub); font-variant-numeric: tabular-nums; }
+  .bar-track { height: 26px; background: #ECEAE1; border-radius: 5px; overflow: hidden; position: relative; }
+  .bar-fill {
+    height: 100%; background: var(--accent); border-radius: 5px;
+    transition: width .45s cubic-bezier(.22,.61,.36,1), background .2s;
+    display: flex; align-items: center; justify-content: flex-end;
+  }
+  .bar-fill.top { background: var(--lead); }
+  .bar-score { font-size: 12px; color: #fff; padding-right: 8px; font-variant-numeric: tabular-nums; }
+  .bar-row.highlight .bar-track { box-shadow: 0 0 0 2px var(--coral); }
+  .this-tag { font-size: 10px; color: var(--coral); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-left: 8px; }
+
+  .note { margin-top: 26px; font-size: 12.5px; color: var(--sub); line-height: 1.5; border-top: 1px solid var(--border); padding-top: 16px; }
+  .note strong { color: var(--ink); }
+  footer { margin-top: 30px; font-size: 12px; color: var(--sub); text-align: center; }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>How to Judge a Qubit</h1>
+    <p class="tagline">Weight the six axes yourself. Watch the seven platforms re-rank. There is no correct weighting &mdash; that is the point.</p>
+  </header>
+
+  <div class="layout">
+    <div class="panel controls" aria-label="Axis weight controls">
+      <h2>Weight each axis</h2>
+      <div id="sliders"></div>
+      <div class="presets">
+        <button class="preset-btn" data-preset="equal">Equal weight</button>
+        <button class="preset-btn" data-preset="crypto">Crypto machine</button>
+        <button class="preset-btn" data-preset="nearterm">Near-term chemistry</button>
+        <button class="preset-btn" data-preset="scale">Scale &amp; manufacturing</button>
+      </div>
+    </div>
+
+    <div class="panel ranking">
+      <h2>Platform ranking</h2>
+      <p class="hint" id="hint">Adjust the sliders to see who leads under your priorities.</p>
+      <div id="bars"></div>
+      <div class="note">
+        <strong>Reading this honestly:</strong> the scores are illustrative, built from the qualitative standing of each platform on each axis as of early 2026 &mdash; not a benchmark. The value is not the exact number but the movement: change what you care about, and the &ldquo;winner&rdquo; changes with you. Any platform can top this chart under some weighting, and none tops it under all. That is the whole thesis of the series.
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Part of the Quantum Hardware series by Manuel Esparcia Cantos &middot; Article 1 of 8
+  </footer>
+</div>
+
+<script>
+// Axes and their descriptions
+const AXES = [
+  { key: 'fidelity',   name: 'Gate fidelity',     desc: 'Accuracy per operation. Sets whether error correction is possible at all.' },
+  { key: 'coherence',  name: 'Coherence',          desc: 'How long the state survives, relative to gate speed.' },
+  { key: 'connectivity', name: 'Connectivity',     desc: 'Which qubits can directly interact. All-to-all beats fixed lattice.' },
+  { key: 'speed',      name: 'Gate speed',         desc: 'Operations per second. More ops inside the coherence window.' },
+  { key: 'temperature', name: 'Room-temp operation', desc: 'Higher = less cryogenic burden. Easier to scale and wire.' },
+  { key: 'manufacturability', name: 'Manufacturability', desc: 'Can you build millions, uniformly, with existing tools?' },
+];
+
+// Platform scores per axis, 0-10, qualitative early-2026 standing.
+// These are deliberately coarse and defensible, not a benchmark.
+const PLATFORMS = [
+  { name: 'Superconducting', s: { fidelity: 8, coherence: 4, connectivity: 5, speed: 10, temperature: 2, manufacturability: 7 } },
+  { name: 'Trapped ion',     s: { fidelity: 10, coherence: 9, connectivity: 10, speed: 3, temperature: 8, manufacturability: 4 } },
+  { name: 'Neutral atom',    s: { fidelity: 7, coherence: 9, connectivity: 8, speed: 4, temperature: 8, manufacturability: 7 } },
+  { name: 'Photonic',        s: { fidelity: 6, coherence: 7, connectivity: 8, speed: 6, temperature: 7, manufacturability: 10 } },
+  { name: 'Silicon spin',    s: { fidelity: 7, coherence: 8, connectivity: 5, speed: 8, temperature: 4, manufacturability: 10 } },
+  { name: 'Cat / bosonic',   s: { fidelity: 7, coherence: 8, connectivity: 5, speed: 9, temperature: 2, manufacturability: 6 } },
+  { name: 'Topological',     s: { fidelity: 3, coherence: 3, connectivity: 4, speed: 4, temperature: 2, manufacturability: 3 } },
+];
+
+const PRESETS = {
+  equal:    { fidelity: 5, coherence: 5, connectivity: 5, speed: 5, temperature: 5, manufacturability: 5 },
+  crypto:   { fidelity: 10, coherence: 6, connectivity: 6, speed: 5, temperature: 3, manufacturability: 9 },
+  nearterm: { fidelity: 6, coherence: 9, connectivity: 7, speed: 4, temperature: 6, manufacturability: 3 },
+  scale:    { fidelity: 6, coherence: 5, connectivity: 4, speed: 4, temperature: 7, manufacturability: 10 },
+};
+
+const HINTS = {
+  crypto: 'Fault-tolerant crypto machine: fidelity and manufacturability dominate; raw qubit count stops mattering.',
+  nearterm: 'Near-term chemistry: many long-lived qubits now, less weight on manufacturing the endgame.',
+  scale: 'Scale & manufacturing: the foundry-compatible platforms rise to the top.',
+  equal: 'Equal weight across all six axes: a balanced, and deliberately unopinionated, view.',
+};
+
+const weights = { fidelity: 5, coherence: 5, connectivity: 5, speed: 5, temperature: 5, manufacturability: 5 };
+
+// Build sliders
+const slidersEl = document.getElementById('sliders');
+AXES.forEach(ax => {
+  const row = document.createElement('div');
+  row.className = 'slider-row';
+  row.innerHTML = `
+    <div class="slider-label">
+      <span class="name">${ax.name}</span>
+      <span class="val" id="val-${ax.key}">5</span>
+    </div>
+    <div class="slider-desc">${ax.desc}</div>
+    <input type="range" min="0" max="10" value="5" step="1"
+      id="sl-${ax.key}" aria-label="${ax.name} weight">
+  `;
+  slidersEl.appendChild(row);
+  row.querySelector('input').addEventListener('input', e => {
+    weights[ax.key] = +e.target.value;
+    document.getElementById('val-' + ax.key).textContent = e.target.value;
+    render();
+  });
+});
+
+// Build bar rows once
+const barsEl = document.getElementById('bars');
+const barEls = {};
+PLATFORMS.forEach(p => {
+  const row = document.createElement('div');
+  row.className = 'bar-row';
+  row.innerHTML = `
+    <div class="bar-head">
+      <span class="bar-name">${p.name}</span>
+      <span class="bar-rank" id="rank-${cssId(p.name)}"></span>
+    </div>
+    <div class="bar-track">
+      <div class="bar-fill" id="fill-${cssId(p.name)}">
+        <span class="bar-score" id="score-${cssId(p.name)}"></span>
+      </div>
+    </div>`;
+  barsEl.appendChild(row);
+  barEls[p.name] = row;
+  if (p.name === HIGHLIGHT) {
+    row.classList.add('highlight');
+    const nameEl = row.querySelector('.bar-name');
+    const tag = document.createElement('span');
+    tag.className = 'this-tag';
+    tag.textContent = 'this article';
+    nameEl.appendChild(tag);
+  }
+});
+
+function cssId(name){ return name.replace(/[^a-z]/gi,''); }
+
+// Optional ?highlight=<platform> to emphasize the article's own modality
+const HL_MAP = {
+  superconducting: 'Superconducting', ion: 'Trapped ion', 'trapped-ion': 'Trapped ion',
+  neutral: 'Neutral atom', 'neutral-atom': 'Neutral atom', atom: 'Neutral atom',
+  photonic: 'Photonic', photonics: 'Photonic',
+  silicon: 'Silicon spin', 'silicon-spin': 'Silicon spin', spin: 'Silicon spin',
+  cat: 'Cat / bosonic', bosonic: 'Cat / bosonic',
+  topological: 'Topological', topo: 'Topological'
+};
+const hlParam = new URLSearchParams(location.search).get('highlight');
+const HIGHLIGHT = hlParam ? (HL_MAP[hlParam.toLowerCase()] || null) : null;
+
+function score(p) {
+  let num = 0, den = 0;
+  for (const ax of AXES) {
+    num += weights[ax.key] * p.s[ax.key];
+    den += weights[ax.key] * 10;
+  }
+  return den === 0 ? 0 : (num / den) * 100;
+}
+
+const ROW_H = 50; // approx px per row for reordering transform
+
+function render() {
+  const scored = PLATFORMS.map(p => ({ name: p.name, val: score(p) }))
+    .sort((a,b) => b.val - a.val);
+  const max = Math.max(...scored.map(s => s.val), 1);
+
+  scored.forEach((s, i) => {
+    const row = barEls[s.name];
+    row.style.transform = `translateY(${i * ROW_H}px)`;
+    const fill = document.getElementById('fill-' + cssId(s.name));
+    const pct = (s.val / max) * 100;
+    fill.style.width = pct.toFixed(1) + '%';
+    fill.classList.toggle('top', i === 0);
+    document.getElementById('score-' + cssId(s.name)).textContent = Math.round(s.val);
+    document.getElementById('rank-' + cssId(s.name)).textContent = '#' + (i + 1);
+  });
+}
+
+// Absolute-position rows for smooth reordering
+barsEl.style.position = 'relative';
+barsEl.style.height = (PLATFORMS.length * ROW_H) + 'px';
+PLATFORMS.forEach(p => {
+  const row = barEls[p.name];
+  row.style.position = 'absolute';
+  row.style.left = '0';
+  row.style.right = '0';
+});
+
+// Presets
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const preset = PRESETS[btn.dataset.preset];
+    for (const ax of AXES) {
+      weights[ax.key] = preset[ax.key];
+      document.getElementById('sl-' + ax.key).value = preset[ax.key];
+      document.getElementById('val-' + ax.key).textContent = preset[ax.key];
+    }
+    document.getElementById('hint').textContent = HINTS[btn.dataset.preset] || '';
+    render();
+  });
+});
+
+render();
+</script>
+</body>
+</html>

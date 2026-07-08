@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Topological Playground — Braiding Anyons</title>
+<style>
+  :root{--bg:#F1EFE8;--card:#FAF9F5;--ink:#2C2C2A;--sub:#5F5E5A;--border:#D5D2C6;--accent:#3A5A6C;--a1:#534AB7;--a2:#C0492F;--ok:#0F6E56;--amber:#B8860B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{background:var(--bg);color:var(--ink);font-family:Georgia,'Times New Roman',serif;line-height:1.5;padding:24px 16px 60px}
+  .wrap{max-width:900px;margin:0 auto}
+  header{margin-bottom:24px}
+  h1{font-size:clamp(22px,4vw,30px);font-weight:700}
+  .tagline{color:var(--sub);font-size:clamp(13px,2.4vw,15px);margin-top:8px;font-style:italic}
+  .layout{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  @media(max-width:760px){.layout{grid-template-columns:1fr}}
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:18px}
+  .panel h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);font-weight:700;margin-bottom:14px}
+  canvas{display:block;width:100%;height:auto;background:transparent}
+  .row{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
+  .btn{font-family:inherit;font-size:13px;padding:9px 14px;cursor:pointer;background:var(--accent);color:#fff;border:none;border-radius:6px}
+  .btn:hover{background:#2f4a59}
+  .btn.secondary{background:var(--bg);color:var(--ink);border:1px solid var(--border)}
+  .btn.secondary:hover{background:#ECEAE1}
+  .btn:focus-visible{outline:3px solid rgba(58,90,108,.35);outline-offset:1px}
+  .hint{font-size:13px;color:var(--sub);margin-top:12px;min-height:20px}
+  .status{font-size:13px;margin-top:10px}
+  .status b.trivial{color:var(--ok)} .status b.nontrivial{color:var(--a1)}
+  .caveat{font-size:12px;color:var(--amber);font-style:italic;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
+  footer{margin-top:26px;font-size:12px;color:var(--sub);text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Braiding Anyons</h1>
+    <p class="tagline">Swap two anyons and their world-lines braid. Only the crossing pattern matters — not how carefully you moved. That path-independence is topological protection.</p>
+  </header>
+
+  <div class="layout">
+    <div class="panel">
+      <h2>The two anyons</h2>
+      <canvas id="stage" width="380" height="300" aria-label="Two anyons that can be braided"></canvas>
+      <div class="row">
+        <button class="btn" id="braidCW">Braid ↻ (clockwise)</button>
+        <button class="btn" id="braidCCW">Braid ↺ (counter)</button>
+        <button class="btn secondary" id="reset">Reset</button>
+      </div>
+      <p class="hint" id="hint">Braid the two anyons and watch the strand diagram build below.</p>
+    </div>
+    <div class="panel">
+      <h2>World-line braid (time flows down)</h2>
+      <canvas id="strand" width="380" height="300" aria-label="The accumulated braid of world-lines over time"></canvas>
+      <p class="status" id="status">Net braid: <b class="trivial">trivial</b> (no operation yet)</p>
+      <p class="caveat">This illustrates the theory. Whether nature actually provides these non-Abelian anyons in real devices is the unproven question this article is about.</p>
+    </div>
+  </div>
+
+  <footer>Part of the Quantum Hardware series by Manuel Esparcia Cantos · Article 8 of 8</footer>
+</div>
+
+<script>
+const cv=document.getElementById('stage'), ctx=cv.getContext('2d');
+const st=document.getElementById('strand'), sx=st.getContext('2d');
+let braids=[]; // sequence of +1 (CW) / -1 (CCW)
+let animating=false;
+
+function drawAnyons(swapPhase=null){
+  const w=cv.width,h=cv.height,cy=h/2;
+  ctx.clearRect(0,0,w,h);
+  const leftX=120,rightX=260;
+  let ax=leftX,ay=cy,bx=rightX,by=cy;
+  if(swapPhase!==null){
+    // animate a half-swap around center
+    const cx=(leftX+rightX)/2, r=(rightX-leftX)/2;
+    const ang=swapPhase*Math.PI;
+    ax=cx-Math.cos(ang)*r; ay=cy-Math.sin(ang)*r*0.5;
+    bx=cx+Math.cos(ang)*r; by=cy+Math.sin(ang)*r*0.5;
+  }
+  // anyon A
+  ctx.beginPath(); ctx.arc(ax,ay,18,0,2*Math.PI); ctx.fillStyle='#CECBF6'; ctx.strokeStyle='#534AB7'; ctx.lineWidth=2.5; ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#3C3489'; ctx.font='14px Georgia'; ctx.textAlign='center'; ctx.fillText('A',ax,ay+5);
+  // anyon B
+  ctx.beginPath(); ctx.arc(bx,by,18,0,2*Math.PI); ctx.fillStyle='#F5C4B3'; ctx.strokeStyle='#C0492F'; ctx.lineWidth=2.5; ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#993C1D'; ctx.fillText('B',bx,by+5);
+}
+
+function drawStrand(){
+  const w=st.width,h=st.height;
+  sx.clearRect(0,0,w,h);
+  const leftX=w*0.35, rightX=w*0.65;
+  const topY=20, botY=h-20;
+  const n=braids.length;
+  if(n===0){
+    // straight parallel lines
+    sx.strokeStyle='#534AB7'; sx.lineWidth=3; sx.beginPath(); sx.moveTo(leftX,topY); sx.lineTo(leftX,botY); sx.stroke();
+    sx.strokeStyle='#C0492F'; sx.beginPath(); sx.moveTo(rightX,topY); sx.lineTo(rightX,botY); sx.stroke();
+    return;
+  }
+  const seg=(botY-topY)/n;
+  // track which strand is on left: A starts left
+  let posA=0; // 0=left,1=right
+  let colors=['#534AB7','#C0492F'];
+  // We'll draw each crossing
+  let y=topY;
+  // maintain x for two logical strands (A and B) — A always colored purple, B coral
+  let ax=leftX, bx=rightX;
+  for(let i=0;i<n;i++){
+    const y2=y+seg;
+    const over = braids[i]>0; // CW = A over B (arbitrary)
+    // strands cross: swap ax,bx
+    const nax=bx, nbx=ax;
+    // draw B first (so A can be "over")
+    drawStrandSeg(sx, bx, y, nbx, y2, '#C0492F', over? false: true);
+    drawStrandSeg(sx, ax, y, nax, y2, '#534AB7', over? true: false);
+    ax=nax; bx=nbx; y=y2;
+  }
+}
+
+function drawStrandSeg(c, x1,y1,x2,y2, color, isOver){
+  c.strokeStyle=color; c.lineWidth=3;
+  if(isOver){
+    c.beginPath(); c.moveTo(x1,y1); c.bezierCurveTo((x1+x2)/2,y1+(y2-y1)*0.5,(x1+x2)/2,y1+(y2-y1)*0.5,x2,y2); c.stroke();
+  } else {
+    // draw with a gap in the middle to appear "under"
+    c.beginPath(); c.moveTo(x1,y1);
+    const mx=(x1+x2)/2, my=(y1+y2)/2;
+    c.bezierCurveTo((x1+mx)/2,(y1+my)/2,(x1+mx)/2,(y1+my)/2,mx-6,my-3); c.stroke();
+    c.beginPath(); c.moveTo(mx+6,my+3);
+    c.bezierCurveTo((mx+x2)/2,(my+y2)/2,(mx+x2)/2,(my+y2)/2,x2,y2); c.stroke();
+  }
+}
+
+function updateStatus(){
+  const net=braids.reduce((a,b)=>a+b,0);
+  const el=document.getElementById('status');
+  if(net===0 && braids.length>0){
+    el.innerHTML='Net braid: <b class="trivial">trivial</b> — the operations cancelled (net topology is nothing).';
+  } else if(net===0){
+    el.innerHTML='Net braid: <b class="trivial">trivial</b> (no operation yet)';
+  } else {
+    el.innerHTML=`Net braid: <b class="nontrivial">${Math.abs(net)} crossing${Math.abs(net)>1?'s':''} ${net>0?'↻':'↺'}</b> — a genuine topological gate has accumulated.`;
+  }
+}
+
+function doBraid(dir){
+  if(animating) return;
+  animating=true;
+  let t=0;
+  function step(){
+    t+=0.06;
+    drawAnyons(Math.min(t,1));
+    if(t<1){ requestAnimationFrame(step); }
+    else {
+      braids.push(dir);
+      drawAnyons(null); drawStrand(); updateStatus();
+      document.getElementById('hint').innerHTML = 'Braid added. Try braiding back the other way to cancel it, or the same way to accumulate.';
+      animating=false;
+    }
+  }
+  step();
+}
+
+document.getElementById('braidCW').addEventListener('click',()=>doBraid(+1));
+document.getElementById('braidCCW').addEventListener('click',()=>doBraid(-1));
+document.getElementById('reset').addEventListener('click',()=>{
+  braids=[]; drawAnyons(null); drawStrand(); updateStatus();
+  document.getElementById('hint').textContent='Braid the two anyons and watch the strand diagram build below.';
+});
+
+drawAnyons(null); drawStrand(); updateStatus();
+</script>
+</body>
+</html>
