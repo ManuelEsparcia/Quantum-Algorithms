@@ -190,6 +190,20 @@ AXES.forEach(ax => {
   });
 });
 
+function cssId(name){ return name.replace(/[^a-z]/gi,''); }
+
+// Optional ?highlight=<platform> to emphasize the article's own modality
+const HL_MAP = {
+  superconducting: 'Superconducting', ion: 'Trapped ion', 'trapped-ion': 'Trapped ion',
+  neutral: 'Neutral atom', 'neutral-atom': 'Neutral atom', atom: 'Neutral atom',
+  photonic: 'Photonic', photonics: 'Photonic',
+  silicon: 'Silicon spin', 'silicon-spin': 'Silicon spin', spin: 'Silicon spin',
+  cat: 'Cat / bosonic', bosonic: 'Cat / bosonic',
+  topological: 'Topological', topo: 'Topological'
+};
+const hlParam = new URLSearchParams(location.search).get('highlight');
+const HIGHLIGHT = hlParam ? (HL_MAP[hlParam.toLowerCase()] || null) : null;
+
 // Build bar rows once
 const barsEl = document.getElementById('bars');
 const barEls = {};
@@ -217,20 +231,6 @@ PLATFORMS.forEach(p => {
     nameEl.appendChild(tag);
   }
 });
-
-function cssId(name){ return name.replace(/[^a-z]/gi,''); }
-
-// Optional ?highlight=<platform> to emphasize the article's own modality
-const HL_MAP = {
-  superconducting: 'Superconducting', ion: 'Trapped ion', 'trapped-ion': 'Trapped ion',
-  neutral: 'Neutral atom', 'neutral-atom': 'Neutral atom', atom: 'Neutral atom',
-  photonic: 'Photonic', photonics: 'Photonic',
-  silicon: 'Silicon spin', 'silicon-spin': 'Silicon spin', spin: 'Silicon spin',
-  cat: 'Cat / bosonic', bosonic: 'Cat / bosonic',
-  topological: 'Topological', topo: 'Topological'
-};
-const hlParam = new URLSearchParams(location.search).get('highlight');
-const HIGHLIGHT = hlParam ? (HL_MAP[hlParam.toLowerCase()] || null) : null;
 
 function score(p) {
   let num = 0, den = 0;
